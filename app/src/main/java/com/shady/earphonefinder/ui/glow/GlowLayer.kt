@@ -24,8 +24,8 @@ data class GlowFrame(
     val closeness: Float,
     val warm: Float,
     val found: Float,
-    val even: Float = 0f,
     val spreadHalfRad: Float,
+    val even: Float = 0f,          // last, so positional callers keep working
 )
 
 @Composable
