@@ -23,6 +23,7 @@ data class GlowFrame(
     val dirRad: Float,
     val closeness: Float,
     val warm: Float,
+    val found: Float,
     val spreadHalfRad: Float,
 )
 
@@ -44,6 +45,7 @@ private fun ShaderGlow(frame: State<GlowFrame>, k: GlowTuning, modifier: Modifie
         shader.setFloatUniform("uDir", f.dirRad)
         shader.setFloatUniform("uHot", f.closeness)
         shader.setFloatUniform("uWarm", f.warm)
+        shader.setFloatUniform("uFound", f.found)
         shader.setFloatUniform("uWidth", k.glowWidth)
         shader.setFloatUniform("uBright", k.brightness)
         shader.setFloatUniform("uShimmer", k.shimmer)

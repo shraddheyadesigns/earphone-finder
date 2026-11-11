@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val scheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
             MaterialTheme(colorScheme = scheme) {
-                Surface {
+                Surface(color = com.shady.earphonefinder.ui.Look.Bg) {
                     val launcher = rememberLauncherForActivityResult(
                         ActivityResultContracts.RequestMultiplePermissions()
                     ) {

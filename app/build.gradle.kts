@@ -12,8 +12,8 @@ android {
         applicationId = "com.shady.earphonefinder"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2-glow"
+        versionCode = 3
+        versionName = "0.3-look"
     }
 
     // Same debug key on every build machine, so new builds install over old ones

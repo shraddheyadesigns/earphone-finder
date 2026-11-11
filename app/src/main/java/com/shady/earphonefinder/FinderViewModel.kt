@@ -225,7 +225,7 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         bearingConfidence = est?.confidence ?: 0.0
         if (bearing.locked && est != null) bearingDeg = est.bearingDeg
         huntState = when {
-            since != null && since > 5_000 -> HuntState.LOST
+            since != null && since > 8_000 -> HuntState.LOST   // some buds advertise only ~1-2x a second
             bearing.locked -> HuntState.FOUND
             else -> HuntState.CALIBRATING
         }

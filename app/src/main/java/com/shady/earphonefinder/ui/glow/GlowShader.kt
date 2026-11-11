@@ -3,6 +3,8 @@ package com.shady.earphonefinder.ui.glow
 /**
  * The edge glow, ported 1:1 from the web prototype (tools/glow-prototype.html).
  * Verified by translating back to GLSL and diffing pixels against the original: identical.
+ * One change from the prototype: arc shape is driven by uFound, colour by uWarm, so the
+ * temperature colours show while still calibrating.
  * Coordinates are flipped to y-up at the top of main() so all the maths matches the prototype.
  */
 internal const val GLOW_AGSL = """
@@ -11,6 +13,7 @@ uniform float uTime;
 uniform float uDir;
 uniform float uHot;
 uniform float uWarm;
+uniform float uFound;
 uniform float uWidth;
 uniform float uBright;
 uniform float uShimmer;
@@ -59,7 +62,7 @@ float dirWeight(float ang0){
   float loaderW = exp(uSpinFocus * (cd - 1.0));
   float ang = acos(clamp(cd, -1.0, 1.0));
   float arcW = (1.0 - smoothstep(uSpread, uSpread + uSoft, ang)) * (0.35 + 0.3*exp(1.5*(cd - 1.0)));
-  return mix(loaderW, arcW, uWarm);
+  return mix(loaderW, arcW, uFound);   // shape waits for a direction; colour (uWarm) doesn't
 }
 
 float3 glowAt(float2 px){

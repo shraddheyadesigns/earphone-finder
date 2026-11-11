@@ -32,14 +32,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.shady.earphonefinder.FinderViewModel
-import com.shady.earphonefinder.R
 import com.shady.earphonefinder.engine.Trend
 import com.shady.earphonefinder.ui.glow.GlowAnimator
 import com.shady.earphonefinder.ui.glow.GlowFrame
@@ -47,8 +44,8 @@ import com.shady.earphonefinder.ui.glow.GlowLayer
 import com.shady.earphonefinder.ui.glow.GlowTuning
 import com.shady.earphonefinder.ui.glow.HuntState
 
-private val InterTight = FontFamily(Font(R.font.inter_tight_medium, FontWeight.Medium))
-private val SpaceMono = FontFamily(Font(R.font.space_mono_regular, FontWeight.Normal))
+private val InterTight = Look.InterTight
+private val SpaceMono = Look.SpaceMono
 
 /** The real hunt screen: edge glow, distance, quiet subtext, Pixel Man when we need you to move. */
 @Composable
@@ -56,7 +53,7 @@ fun HuntScreen(vm: FinderViewModel) {
     BackHandler { vm.stopTracking() }
     val tuning = remember { GlowTuning() }
     val anim = remember { GlowAnimator(tuning) }
-    val frame = remember { mutableStateOf(GlowFrame(0f, 0f, 0f, 0f, 1f)) }
+    val frame = remember { mutableStateOf(GlowFrame(0f, 0f, 0f, 0f, 0f, 1f)) }
     val pmPhase = remember { mutableFloatStateOf(0f) }
 
     // one clock drives everything
@@ -74,6 +71,7 @@ fun HuntScreen(vm: FinderViewModel) {
                     dirRad = anim.dir.toFloat(),
                     closeness = anim.closeness.toFloat(),
                     warm = anim.warm.toFloat(),
+                    found = anim.found.toFloat(),
                     spreadHalfRad = anim.spreadHalfRad,
                 )
             }
@@ -95,6 +93,13 @@ fun HuntScreen(vm: FinderViewModel) {
         vm.trend == Trend.WARMER -> "Warmer"
         vm.trend == Trend.COLDER -> "Colder"
         else -> "Steady"
+    }
+    // Walls weaken the signal too, so a big number can mean "close, behind something".
+    val wallNote = when {
+        vm.huntState == HuntState.LOST -> null
+        anim.feet > 20 -> "or in the next room"
+        anim.feet > 10 -> "or in the same room"
+        else -> null
     }
 
     Box(Modifier.fillMaxSize().background(Color(0xFF050506))) {
@@ -133,6 +138,10 @@ fun HuntScreen(vm: FinderViewModel) {
                     PixelMan(vm.huntState, pmPhase.floatValue, f.timeSec)
                 }
                 Text(hint, style = TextStyle(fontFamily = SpaceMono, fontSize = 13.sp, color = Color.White.copy(alpha = subAlpha)))
+            }
+            if (wallNote != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(wallNote, style = TextStyle(fontFamily = SpaceMono, fontSize = 12.sp, color = Color.White.copy(alpha = subAlpha * 0.8f)))
             }
         }
 
