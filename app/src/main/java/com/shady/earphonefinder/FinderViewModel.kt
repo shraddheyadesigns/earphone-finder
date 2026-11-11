@@ -157,7 +157,8 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
             if (say(GuideAudio.Line.LOST, t)) lastLostAt = t
         }
         // calibrating: once when the first reading lands, then every 30 s while still at it
-        if (huntState == HuntState.CALIBRATING && ft != null && t - lastCalibrateAt > 30_000 && t - lastLineAt > 4_000) {
+        // only when it helps: cold (over ~10 ft). When warm, the chirps and zones guide you instead.
+        if (huntState == HuntState.CALIBRATING && ft != null && ft > 10 && t - lastCalibrateAt > 30_000 && t - lastLineAt > 4_000) {
             if (say(GuideAudio.Line.CALIBRATE, t)) lastCalibrateAt = t
         }
         // distance zone: announce once it has held for 2 s, at most every 5 s

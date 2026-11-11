@@ -17,9 +17,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -105,11 +103,11 @@ fun ToggleLine(label: String, on: Boolean, onClick: () -> Unit) {
 fun Modifier.panel(): Modifier =
     this.clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.04f))
 
-enum class Glyph { SPEAKER_LEFT, SPEAKER_RIGHT, STOP }
+enum class Glyph { EARBUD_LEFT, EARBUD_RIGHT, STOP }
 
 /** A real button: soft fill, small drawn icon, mono label. */
 @Composable
-fun IconButtonLike(label: String, glyph: Glyph, onClick: () -> Unit) {
+fun IconButtonLike(label: String, glyph: Glyph?, onClick: () -> Unit) {
     Row(
         Modifier
             .clip(RoundedCornerShape(14.dp))
@@ -118,8 +116,10 @@ fun IconButtonLike(label: String, glyph: Glyph, onClick: () -> Unit) {
             .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Canvas(Modifier.size(16.dp)) { drawGlyph(glyph) }
-        Spacer(Modifier.width(8.dp))
+        if (glyph != null) {
+            Canvas(Modifier.size(16.dp)) { drawGlyph(glyph) }
+            Spacer(Modifier.width(8.dp))
+        }
         Text(label, style = Look.link.copy(color = Color.White.copy(alpha = 0.85f)))
     }
 }
@@ -131,20 +131,16 @@ private fun DrawScope.drawGlyph(g: Glyph) {
         drawRoundRect(c, topLeft = Offset(w * 0.22f, h * 0.22f), size = Size(w * 0.56f, h * 0.56f), cornerRadius = CornerRadius(2.dp.toPx()))
         return
     }
-    // speaker body + cone, facing right; mirrored for left
-    val flip = g == Glyph.SPEAKER_LEFT
+    // an earbud: round bud with a short stem, tipped toward its ear; mirrored for the other side
+    val flip = g == Glyph.EARBUD_RIGHT
     fun x(v: Float) = if (flip) w - v * w else v * w
-    val body = Path().apply {
-        moveTo(x(0.08f), h * 0.38f); lineTo(x(0.30f), h * 0.38f); lineTo(x(0.55f), h * 0.15f)
-        lineTo(x(0.55f), h * 0.85f); lineTo(x(0.30f), h * 0.62f); lineTo(x(0.08f), h * 0.62f); close()
+    drawCircle(c, radius = w * 0.27f, center = Offset(x(0.40f), h * 0.33f))
+    drawCircle(Color.Black.copy(alpha = 0.55f), radius = w * 0.09f, center = Offset(x(0.30f), h * 0.30f))   // speaker tip
+    val stem = Path().apply {
+        moveTo(x(0.50f), h * 0.42f); lineTo(x(0.66f), h * 0.42f)
+        lineTo(x(0.70f), h * 0.92f); lineTo(x(0.56f), h * 0.92f); close()
     }
-    drawPath(body, c)
-    val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
-    for ((i, rr) in listOf(0.18f, 0.32f).withIndex()) {
-        val cx = x(0.55f); val r = rr * w
-        drawArc(c.copy(alpha = 0.85f - i * 0.3f), startAngle = if (flip) 135f else -45f, sweepAngle = 90f, useCenter = false,
-            topLeft = Offset(cx - r, h / 2 - r), size = Size(r * 2, r * 2), style = stroke)
-    }
+    drawPath(stem, c)
 }
 
 /** The slate loader glow, slowly circling the edge. Sits behind the non-hunt screens. */

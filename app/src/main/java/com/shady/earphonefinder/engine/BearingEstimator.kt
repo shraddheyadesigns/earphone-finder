@@ -22,7 +22,7 @@ import kotlin.math.sqrt
  */
 class BearingEstimator(
     private val stepM: Double = 0.7,
-    private val windowMs: Long = 20_000,
+    private val windowMs: Long = 30_000,     // some buds advertise only ~1x a second
     private val tauMs: Double = 8_000.0,
     private val minSpanM: Double = 1.2,
     private val lockConf: Double = 0.55,
@@ -75,7 +75,7 @@ class BearingEstimator(
 
     private fun estimate(nowMs: Long): Estimate? {
         val n = pts.size
-        if (n < 15) return null
+        if (n < 10) return null
 
         // How far did we actually walk? Need some spread or the fit is meaningless.
         var mx = 0.0; var my = 0.0

@@ -23,7 +23,6 @@ import androidx.core.content.ContextCompat
 import com.shady.earphonefinder.ui.DeviceListScreen
 import com.shady.earphonefinder.ui.HuntScreen
 import com.shady.earphonefinder.ui.PermissionScreen
-import com.shady.earphonefinder.ui.TrackScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -75,8 +74,7 @@ class MainActivity : ComponentActivity() {
                             onRequest = { launcher.launch(needed + motion) },
                         )
                         vm.target == null -> DeviceListScreen(vm)
-                        vm.showDetails -> TrackScreen(vm)
-                        else -> HuntScreen(vm)
+                        else -> HuntScreen(vm)   // details is drawn on top of the hunt glow
                     }
                 }
             }

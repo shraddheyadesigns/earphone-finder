@@ -1,6 +1,5 @@
 package com.shady.earphonefinder.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -128,95 +127,102 @@ private fun DeviceItem(d: DeviceRow, now: Long, onClick: () -> Unit) {
     }
 }
 
+/** One section: heading, a line of explanation, then its actions. Same rhythm everywhere. */
 @Composable
-fun TrackScreen(vm: FinderViewModel) {
+private fun Section(title: String, body: String?, content: @Composable () -> Unit = {}) {
+    Spacer(Modifier.height(40.dp))
+    Text(title, style = Look.name)
+    if (body != null) {
+        Spacer(Modifier.height(6.dp))
+        Text(body, style = Look.body)
+    }
+    Spacer(Modifier.height(14.dp))
+    content()
+}
+
+/** Details, drawn over the live hunt glow (see HuntScreen). Extra numbers on top of the same hunt. */
+@Composable
+fun DetailsContent(vm: FinderViewModel) {
     val t = vm.target ?: return
-    BackHandler { vm.showDetails = false }
+    Column(
+        Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp).verticalScroll(rememberScrollState()),
+    ) {
+        Spacer(Modifier.height(8.dp))
+        TextLink("←  back to the hunt") { vm.showDetails = false }
 
-    Page {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            Spacer(Modifier.height(8.dp))
-            TextLink("←  back to the hunt") { vm.showDetails = false }
-            Spacer(Modifier.height(12.dp))
-            Text(t.name?.takeIf { it.isNotBlank() } ?: "No name", style = Look.title)
-            Text(t.address, style = Look.mono)
+        // ----- who -----
+        Spacer(Modifier.height(20.dp))
+        Text(t.name?.takeIf { it.isNotBlank() } ?: "No name", style = Look.title)
+        Spacer(Modifier.height(2.dp))
+        Text(t.address, style = Look.mono)
 
-            // ----- signal -----
-            Spacer(Modifier.height(28.dp))
-            val v = vm.smoothed
-            Text(if (v == null) "listening" else "${v.roundToInt()} dBm", style = Look.big)
-            if (v != null) {
-                Text("${Proximity.label(v)}, about ${"%.1f".format(Proximity.metres(v))} m", style = Look.body)
+        // ----- signal: the one big number on this page -----
+        Spacer(Modifier.height(36.dp))
+        Text("signal", style = Look.mono)
+        Spacer(Modifier.height(4.dp))
+        val v = vm.smoothed
+        Text(if (v == null) "listening" else "${v.roundToInt()} dBm", style = Look.big)
+        Spacer(Modifier.height(6.dp))
+        if (v != null) {
+            val trend = when (vm.trend) {
+                Trend.WARMER -> ", getting warmer"
+                Trend.COLDER -> ", getting colder"
+                else -> ", steady"
             }
-            Text(
-                when (vm.trend) {
-                    Trend.WARMER -> "warmer"
-                    Trend.COLDER -> "colder"
-                    Trend.STEADY -> "steady"
-                    Trend.UNKNOWN -> " "
-                },
-                style = Look.link,
-            )
+            Text("About ${"%.1f".format(Proximity.metres(v))} m away$trend", style = Look.body)
+        }
+        Spacer(Modifier.height(14.dp))
+        Meter(vm.hotness)
+        Spacer(Modifier.height(8.dp))
+        val since = vm.msSinceLast
+        Text(
+            "raw ${vm.lastRaw ?: "–"}   ${"%.1f".format(vm.readingsPerSec)} readings/s   " +
+                "last ${since?.let { "%.1f".format(it / 1000f) + "s" } ?: "never"} ago",
+            style = Look.mono,
+        )
+        if (since == null || since > 5_000) {
             Spacer(Modifier.height(10.dp))
-            Meter(vm.hotness)
-            Spacer(Modifier.height(8.dp))
-            val since = vm.msSinceLast
             Text(
-                "raw ${vm.lastRaw ?: "–"}   ${"%.1f".format(vm.readingsPerSec)}/s   " +
-                    "last ${since?.let { "%.1f".format(it / 1000f) + "s" } ?: "never"}",
-                style = Look.mono,
+                "No signal right now. It may be in a closed case, flat, or still connected to your phone. Try ringing it below.",
+                style = Look.body.copy(color = Color(0xFFFF8A5B)),
             )
-            if (since == null || since > 5_000) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "No signal right now. It may be asleep, in a closed case, flat, or still connected to your phone. Try ring below.",
-                    style = Look.body.copy(color = Color(0xFFFF8A5B)),
-                )
-            }
+        }
 
-            // ----- hunt engine -----
-            Spacer(Modifier.height(36.dp))
-            Text("Hunt", style = Look.name)
-            Spacer(Modifier.height(4.dp))
+        // ----- direction from walking -----
+        Section(
+            "Direction",
+            "Found by walking with the phone in your hand. Needs a few steps and a turn or two.",
+        ) {
             Text(
                 "${vm.huntState.name.lowercase()}   steps ${vm.stepCount}   confidence ${"%.2f".format(vm.bearingConfidence)}" +
-                    (vm.relativeDirDeg?.let { "   bud ${"%.0f".format(it)}° from top" } ?: ""),
+                    (vm.relativeDirDeg?.let { "   ${"%.0f".format(it)}° from top" } ?: ""),
                 style = Look.mono,
             )
+        }
 
-            // ----- sound + logging -----
-            Spacer(Modifier.height(20.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                TextLink(if (vm.ticking) "stop ticks" else "hot/cold ticks") { vm.toggleTick() }
-                TextLink(if (vm.recordingTo != null) "stop recording" else "record log") { vm.toggleRecording() }
+        // ----- turn in a circle -----
+        Section("Turn in a circle", "Another way to get direction. Your body blocks Bluetooth, so spin once slowly.") {
+            if (!vm.compassAvailable) Text("No rotation sensor on this phone.", style = Look.mono)
+            else DirectionBlock(vm)
+        }
+
+        // ----- ring -----
+        Section("Ring the lost bud", "Still connected to your phone? Make only that side beep. Take the other bud out first.") {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                IconButtonLike("left", Glyph.EARBUD_LEFT) { vm.ring(Sounds.Side.LEFT) }
+                IconButtonLike("right", Glyph.EARBUD_RIGHT) { vm.ring(Sounds.Side.RIGHT) }
+                IconButtonLike("stop", Glyph.STOP) { vm.stopRing() }
             }
+        }
+
+        // ----- logging -----
+        Section("Log this hunt", "Saves the signal and direction to a file, for tuning later.") {
+            TextLink(if (vm.recordingTo != null) "stop recording" else "start recording") { vm.toggleRecording() }
             (vm.recordingTo ?: vm.lastRecording)?.let {
                 Text((if (vm.recordingTo != null) "recording to " else "saved ") + it, style = Look.mono)
             }
-
-            // ----- sweep -----
-            Spacer(Modifier.height(36.dp))
-            Text("Turn-in-a-circle direction", style = Look.name)
-            Spacer(Modifier.height(4.dp))
-            if (!vm.compassAvailable) {
-                Text("No rotation sensor on this phone.", style = Look.body)
-            } else {
-                DirectionBlock(vm)
-            }
-
-            // ----- ring -----
-            Spacer(Modifier.height(36.dp))
-            Text("Ring the lost bud", style = Look.name)
-            Spacer(Modifier.height(4.dp))
-            Text("Still connected to your phone? Make only that side beep. Take the other bud out first.", style = Look.body)
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                IconButtonLike("left", Glyph.SPEAKER_LEFT) { vm.ring(Sounds.Side.LEFT) }
-                IconButtonLike("right", Glyph.SPEAKER_RIGHT) { vm.ring(Sounds.Side.RIGHT) }
-                IconButtonLike("stop", Glyph.STOP) { vm.stopRing() }
-            }
-            Spacer(Modifier.height(40.dp))
         }
+        Spacer(Modifier.height(48.dp))
     }
 }
 
@@ -226,7 +232,7 @@ private fun DirectionBlock(vm: FinderViewModel) {
     val heading = vm.heading
     when {
         vm.sweeping -> {
-            Text("Hold the phone at your chest and turn slowly in a full circle.", style = Look.body)
+            Text("Hold the phone at your chest and keep turning.", style = Look.body)
             Spacer(Modifier.height(10.dp))
             Meter(vm.sweepCoverage)
             Spacer(Modifier.height(6.dp))
@@ -253,11 +259,9 @@ private fun DirectionBlock(vm: FinderViewModel) {
                     Text("${result.confidence.lowercase()}, ${"%.0f".format(result.spreadDb)} dB spread", style = Look.mono)
                 }
             }
-            TextLink("sweep again") { vm.startSweep() }
+            Spacer(Modifier.height(10.dp))
+            IconButtonLike("spin again", null) { vm.startSweep() }
         }
-        else -> {
-            Text("Your body blocks Bluetooth. Spin once and it finds the way you faced when it was strongest.", style = Look.body)
-            TextLink("start  →") { vm.startSweep() }
-        }
+        else -> IconButtonLike("start the spin", null) { vm.startSweep() }
     }
 }
