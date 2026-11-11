@@ -80,21 +80,24 @@ fun DeviceListScreen(vm: FinderViewModel) {
     val now = android.os.SystemClock.elapsedRealtime()
     Page {
         Column(Modifier.fillMaxSize()) {
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(32.dp))
             Text("Which one is yours?", style = Look.title)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
             Text("Paired on top. Not there? Take the other bud out or open the case.", style = Look.body)
             vm.error?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = Look.body.copy(color = Color(0xFFFF8A5B)))
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(20.dp))
             ToggleLine("hide unnamed", vm.hideUnnamed) { vm.hideUnnamed = !vm.hideUnnamed }
-            ToggleLine("classic scan (slow, older buds)", vm.classicOn) { vm.toggleClassic() }
-            Spacer(Modifier.height(8.dp))
-            LazyColumn(Modifier.fillMaxSize()) {
+            ToggleLine("classic scan, for older buds", vm.classicOn) { vm.toggleClassic() }
+            Spacer(Modifier.height(24.dp))
+            Text("nearby  ${vm.devices.size}", style = Look.mono)
+            Spacer(Modifier.height(10.dp))
+            LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false).panel().padding(horizontal = 18.dp, vertical = 6.dp)) {
                 items(vm.devices, key = { it.address }) { d -> DeviceItem(d, now) { vm.track(d) } }
             }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -172,8 +175,9 @@ fun TrackScreen(vm: FinderViewModel) {
             }
 
             // ----- hunt engine -----
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(36.dp))
             Text("Hunt", style = Look.name)
+            Spacer(Modifier.height(4.dp))
             Text(
                 "${vm.huntState.name.lowercase()}   steps ${vm.stepCount}   confidence ${"%.2f".format(vm.bearingConfidence)}" +
                     (vm.relativeDirDeg?.let { "   bud ${"%.0f".format(it)}° from top" } ?: ""),
@@ -191,8 +195,9 @@ fun TrackScreen(vm: FinderViewModel) {
             }
 
             // ----- sweep -----
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(36.dp))
             Text("Turn-in-a-circle direction", style = Look.name)
+            Spacer(Modifier.height(4.dp))
             if (!vm.compassAvailable) {
                 Text("No rotation sensor on this phone.", style = Look.body)
             } else {
@@ -200,13 +205,15 @@ fun TrackScreen(vm: FinderViewModel) {
             }
 
             // ----- ring -----
-            Spacer(Modifier.height(28.dp))
-            Text("Still connected?", style = Look.name)
-            Text("Make only the lost side beep. Take the other bud out first.", style = Look.body)
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                TextLink("ring left") { vm.ring(Sounds.Side.LEFT) }
-                TextLink("ring right") { vm.ring(Sounds.Side.RIGHT) }
-                TextLink("stop") { vm.stopRing() }
+            Spacer(Modifier.height(36.dp))
+            Text("Ring the lost bud", style = Look.name)
+            Spacer(Modifier.height(4.dp))
+            Text("Still connected to your phone? Make only that side beep. Take the other bud out first.", style = Look.body)
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                IconButtonLike("left", Glyph.SPEAKER_LEFT) { vm.ring(Sounds.Side.LEFT) }
+                IconButtonLike("right", Glyph.SPEAKER_RIGHT) { vm.ring(Sounds.Side.RIGHT) }
+                IconButtonLike("stop", Glyph.STOP) { vm.stopRing() }
             }
             Spacer(Modifier.height(40.dp))
         }

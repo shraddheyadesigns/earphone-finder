@@ -38,7 +38,8 @@ class GlowAnimator(private val k: GlowTuning = GlowTuning()) {
     private var v = 0.0
     private var unwrapped = 0.0
     var warm = 0.0; private set          // 0 = slate, 1 = temperature colours (follows distance, any state but lost)
-    var found = 0.0; private set         // 0 = spinning loader shape, 1 = arc on the bud's side
+    var found = 0.0; private set         // 0 = no direction, 1 = arc on the bud's side
+    var even = 0.0; private set          // 1 = even glow all round (calibrating), 0 = spinning loader (lost)
     var closeness = 0.0; private set     // 0 = legit far, 1 = ~1 ft
     var feet = 24.0; private set
     var state = HuntState.CALIBRATING; private set
@@ -76,6 +77,7 @@ class GlowAnimator(private val k: GlowTuning = GlowTuning()) {
             dir += v * dt
             found = ease(found, 0.0, dt, 0.5)
         }
+        even = ease(even, if (state == HuntState.CALIBRATING && targetFeet != null) 1.0 else 0.0, dt, 0.6)
         val colourOn = state != HuntState.LOST && targetFeet != null
         warm = ease(warm, if (colourOn) 1.0 else 0.0, dt, 0.6)
         // keep dir in a sane range without visible jumps

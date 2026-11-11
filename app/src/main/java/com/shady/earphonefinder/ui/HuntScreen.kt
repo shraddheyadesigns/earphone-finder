@@ -73,6 +73,7 @@ fun HuntScreen(vm: FinderViewModel) {
                     closeness = anim.closeness.toFloat(),
                     warm = anim.warm.toFloat(),
                     found = anim.found.toFloat(),
+                    even = anim.even.toFloat(),
                     spreadHalfRad = anim.spreadHalfRad,
                 )
             }
@@ -86,7 +87,9 @@ fun HuntScreen(vm: FinderViewModel) {
     val scrim = nearK * nearK * (3 - 2 * nearK)
     val subAlpha = 0.2f + 0.18f * scrim
 
-    val (num, unit) = GlowAnimator.formatFeet(anim.feet)
+    val lost = vm.huntState == HuntState.LOST
+    // lost: don't show a stale distance as if it were live
+    val (num, unit) = if (lost) "lost" to "" else GlowAnimator.formatFeet(anim.feet)
     val hint = when {
         vm.huntState == HuntState.CALIBRATING -> if (vm.stepsAvailable) "Walk around a bit" else "Allow motion access for direction"
         vm.huntState == HuntState.LOST -> "Lost it, keep moving"
@@ -97,7 +100,12 @@ fun HuntScreen(vm: FinderViewModel) {
     }
     // Walls weaken the signal too, so a big number can mean "close, behind something".
     val wallNote = when {
-        vm.huntState == HuntState.LOST -> null
+        lost -> {
+            val (n, u) = GlowAnimator.formatFeet(anim.feet)
+            val secs = ((vm.msSinceLast ?: 0L) / 1000).coerceAtLeast(0)
+            val where = if (u.isEmpty()) "far away" else "~$n $u"
+            "last seen $where, ${secs}s ago"
+        }
         anim.feet > 20 -> "maybe closer, behind a wall"   // same zones as Michelle's lines,
         anim.feet > 12 -> "maybe in the next room"        // worded to stand on their own
         anim.feet > 6 -> "probably in this room"
@@ -116,15 +124,20 @@ fun HuntScreen(vm: FinderViewModel) {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(verticalAlignment = Alignment.Bottom) {
                 val mono = TextStyle(fontFamily = SpaceMono, fontSize = 22.sp, color = Color.White.copy(alpha = subAlpha))
-                Text("~", style = mono, modifier = Modifier.alignByBaseline())
-                Spacer(Modifier.width(4.dp))
+                if (!lost) {
+                    Text("~", style = mono, modifier = Modifier.alignByBaseline())
+                    Spacer(Modifier.width(4.dp))
+                }
                 Text(
                     num,
                     modifier = Modifier.alignByBaseline(),
                     style = TextStyle(
                         fontFamily = InterTight, fontWeight = FontWeight.Medium, fontSize = 96.sp,
                         letterSpacing = (-0.025).em,
-                        brush = Brush.verticalGradient(listOf(Color.White, Color.White.copy(alpha = 0.55f))),
+                        brush = Brush.verticalGradient(
+                            if (lost) listOf(Color.White.copy(alpha = 0.55f), Color.White.copy(alpha = 0.25f))
+                            else listOf(Color.White, Color.White.copy(alpha = 0.55f))
+                        ),
                     ),
                 )
                 if (unit.isNotEmpty()) {

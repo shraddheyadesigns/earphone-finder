@@ -14,6 +14,7 @@ uniform float uDir;
 uniform float uHot;
 uniform float uWarm;
 uniform float uFound;
+uniform float uEven;
 uniform float uWidth;
 uniform float uBright;
 uniform float uShimmer;
@@ -59,7 +60,8 @@ float lumAt(float c){ return c < 0.37 ? mix(0.45, 1.0, smoothstep(0.0, 0.37, c))
 
 float dirWeight(float ang0){
   float cd = cos(ang0 - uDir);
-  float loaderW = exp(uSpinFocus * (cd - 1.0));
+  // no direction yet: the whole edge glows evenly (uEven=1); lost: the slate loader spins (uEven=0)
+  float loaderW = mix(exp(uSpinFocus * (cd - 1.0)), 0.55 + 0.07 * sin(uTime * 1.6), uEven);
   float ang = acos(clamp(cd, -1.0, 1.0));
   float arcW = (1.0 - smoothstep(uSpread, uSpread + uSoft, ang)) * (0.35 + 0.3*exp(1.5*(cd - 1.0)));
   return mix(loaderW, arcW, uFound);   // shape waits for a direction; colour (uWarm) doesn't

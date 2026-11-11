@@ -1,6 +1,25 @@
 package com.shady.earphonefinder.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -60,10 +79,72 @@ fun TextLink(text: String, modifier: Modifier = Modifier, enabled: Boolean = tru
     )
 }
 
-/** "label   on" / "label   off" as one tappable line. */
+/** A switch you can read at a glance: a small track with a dot that slides and fills when on. */
 @Composable
 fun ToggleLine(label: String, on: Boolean, onClick: () -> Unit) {
-    TextLink("$label   ${if (on) "on" else "off"}", onClick = onClick)
+    val knob by animateFloatAsState(if (on) 1f else 0f, tween(180), label = "knob")
+    Row(
+        Modifier
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(Modifier.size(width = 30.dp, height = 18.dp)) {
+            val h = size.height
+            drawRoundRect(Color.White.copy(alpha = 0.08f + 0.22f * knob), cornerRadius = CornerRadius(h / 2, h / 2))
+            val r = h / 2 - 3.dp.toPx()
+            val cx = h / 2 + (size.width - h) * knob
+            drawCircle(Color.White.copy(alpha = 0.45f + 0.5f * knob), r, Offset(cx, h / 2))
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(label, style = Look.link.copy(color = Color.White.copy(alpha = if (on) 0.85f else 0.55f)))
+    }
+}
+
+/** Soft grouping surface: no border, just a faint lift off the background. */
+fun Modifier.panel(): Modifier =
+    this.clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.04f))
+
+enum class Glyph { SPEAKER_LEFT, SPEAKER_RIGHT, STOP }
+
+/** A real button: soft fill, small drawn icon, mono label. */
+@Composable
+fun IconButtonLike(label: String, glyph: Glyph, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.07f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(Modifier.size(16.dp)) { drawGlyph(glyph) }
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = Look.link.copy(color = Color.White.copy(alpha = 0.85f)))
+    }
+}
+
+private fun DrawScope.drawGlyph(g: Glyph) {
+    val c = Color.White.copy(alpha = 0.85f)
+    val w = size.width; val h = size.height
+    if (g == Glyph.STOP) {
+        drawRoundRect(c, topLeft = Offset(w * 0.22f, h * 0.22f), size = Size(w * 0.56f, h * 0.56f), cornerRadius = CornerRadius(2.dp.toPx()))
+        return
+    }
+    // speaker body + cone, facing right; mirrored for left
+    val flip = g == Glyph.SPEAKER_LEFT
+    fun x(v: Float) = if (flip) w - v * w else v * w
+    val body = Path().apply {
+        moveTo(x(0.08f), h * 0.38f); lineTo(x(0.30f), h * 0.38f); lineTo(x(0.55f), h * 0.15f)
+        lineTo(x(0.55f), h * 0.85f); lineTo(x(0.30f), h * 0.62f); lineTo(x(0.08f), h * 0.62f); close()
+    }
+    drawPath(body, c)
+    val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
+    for ((i, rr) in listOf(0.18f, 0.32f).withIndex()) {
+        val cx = x(0.55f); val r = rr * w
+        drawArc(c.copy(alpha = 0.85f - i * 0.3f), startAngle = if (flip) 135f else -45f, sweepAngle = 90f, useCenter = false,
+            topLeft = Offset(cx - r, h / 2 - r), size = Size(r * 2, r * 2), style = stroke)
+    }
 }
 
 /** The slate loader glow, slowly circling the edge. Sits behind the non-hunt screens. */
