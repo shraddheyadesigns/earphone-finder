@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.shady.earphonefinder.audio.GuideAudio
 import com.shady.earphonefinder.audio.Sounds
 import com.shady.earphonefinder.bt.BtScanner
 import com.shady.earphonefinder.bt.Sighting
@@ -108,6 +109,66 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         stepCount = bearing.steps
     }
 
+    // ---------- audio guide: chirps + Michelle's voice ----------
+    private val guide = GuideAudio(app)
+    var soundOn by mutableStateOf(true)
+    var guideOutputOk by mutableStateOf(false); private set
+    private var zone: GuideAudio.Line? = null          // last zone announced
+    private var zoneCandidate: GuideAudio.Line? = null
+    private var zoneSince = 0L
+    private var lastLineAt = 0L
+    private var lastCalibrateAt = 0L
+    private var lastLostAt = 0L
+    private var prevHunt = HuntState.CALIBRATING
+
+    private fun rawZone(ft: Double) = when {
+        ft > 20 -> GuideAudio.Line.OVER_20
+        ft > 12 -> GuideAudio.Line.WITHIN_15
+        ft > 6 -> GuideAudio.Line.WITHIN_10
+        else -> GuideAudio.Line.WITHIN_5
+    }
+
+    /** Zone with a 1.5 ft buffer, so standing on a boundary doesn't flip-flop. */
+    private fun zoneFor(ft: Double): GuideAudio.Line {
+        val cur = zone ?: return rawZone(ft)
+        val cand = rawZone(ft)
+        if (cand == cur) return cur
+        val closer = cand.ordinal > cur.ordinal
+        return if (rawZone(if (closer) ft + 1.5 else ft - 1.5) == cand) cand else cur
+    }
+
+    private fun say(line: GuideAudio.Line, t: Long): Boolean {
+        if (!soundOn) return false
+        val ok = guide.say(line)
+        if (ok) lastLineAt = t
+        return ok
+    }
+
+    private fun updateGuide(t: Long) {
+        guideOutputOk = guide.outputIsPersonal
+        val ft = feet
+        guide.intervalSec = if (soundOn && huntState != HuntState.LOST && ft != null) GuideAudio.intervalFor(ft) else 0.0
+        if (!soundOn) { prevHunt = huntState; return }
+
+        // connection lost: say it on the way in, at most every 15 s
+        if (huntState == HuntState.LOST && prevHunt != HuntState.LOST && t - lastLostAt > 15_000) {
+            if (say(GuideAudio.Line.LOST, t)) lastLostAt = t
+        }
+        // calibrating: once when the first reading lands, then every 30 s while still at it
+        if (huntState == HuntState.CALIBRATING && ft != null && t - lastCalibrateAt > 30_000 && t - lastLineAt > 4_000) {
+            if (say(GuideAudio.Line.CALIBRATE, t)) lastCalibrateAt = t
+        }
+        // distance zone: announce once it has held for 2 s, at most every 5 s
+        if (ft != null && huntState != HuntState.LOST) {
+            val z = zoneFor(ft)
+            if (z != zoneCandidate) { zoneCandidate = z; zoneSince = t }
+            if (z != zone && t - zoneSince > 2_000 && t - lastLineAt > 5_000) {
+                if (say(z, t)) zone = z
+            }
+        }
+        prevHunt = huntState
+    }
+
     // ---------- sound + logging ----------
     private val sounds = Sounds(viewModelScope)
     var ticking by mutableStateOf(false); private set
@@ -141,12 +202,14 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         if (classicOn) scanner.startClassic()
         compass.start()
         if (stepsGranted) stepSensor.start()
+        if (target != null) guide.start()
     }
 
     fun pause() {
         scanner.stopAll()
         compass.stop()
         stepSensor.stop()
+        guide.stop()
         sounds.stopAll()
         ticking = false
         stopRecording()
@@ -154,6 +217,7 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         pause()
+        guide.release()
     }
 
     fun toggleClassic() {
@@ -229,6 +293,7 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
             bearing.locked -> HuntState.FOUND
             else -> HuntState.CALIBRATING
         }
+        updateGuide(t)
     }
 
     // ---------- tracking controls ----------
@@ -241,6 +306,9 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         sweepResult = null; sweeping = false
         bearing.reset(); bearingDeg = null; bearingConfidence = 0.0; stepCount = 0
         feet = null; huntState = HuntState.CALIBRATING; showDetails = false
+        zone = null; zoneCandidate = null; lastLineAt = 0; lastCalibrateAt = 0; lastLostAt = 0
+        prevHunt = HuntState.CALIBRATING
+        guide.start()
     }
 
     fun stopTracking() {
@@ -249,6 +317,8 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         ticking = false
         sweeping = false
         showDetails = false
+        guide.intervalSec = 0.0
+        guide.stop()
         target = null
     }
 

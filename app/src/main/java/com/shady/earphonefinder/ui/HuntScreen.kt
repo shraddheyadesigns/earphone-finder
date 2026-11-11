@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -97,8 +98,9 @@ fun HuntScreen(vm: FinderViewModel) {
     // Walls weaken the signal too, so a big number can mean "close, behind something".
     val wallNote = when {
         vm.huntState == HuntState.LOST -> null
-        anim.feet > 20 -> "or in the next room"
-        anim.feet > 10 -> "or in the same room"
+        anim.feet > 20 -> "or behind walls"          // same zones as Michelle's lines
+        anim.feet > 12 -> "or in the next room"
+        anim.feet > 6 -> "or in the same room"
         else -> null
     }
 
@@ -145,19 +147,31 @@ fun HuntScreen(vm: FinderViewModel) {
             }
         }
 
-        // quiet way out to the numbers
-        Text(
-            "details",
-            style = TextStyle(fontFamily = SpaceMono, fontSize = 12.sp, color = Color.White.copy(alpha = 0.2f)),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .safeDrawingPadding()
-                .padding(bottom = 16.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
+        // quiet controls at the bottom: sound and details
+        Row(
+            Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(36.dp),
+        ) {
+            val quiet = TextStyle(fontFamily = SpaceMono, fontSize = 12.sp, color = Color.White.copy(alpha = 0.2f))
+            Text(
+                when {
+                    !vm.soundOn -> "sound off"
+                    vm.guideOutputOk -> "sound on"
+                    else -> "sound: connect earbuds"
+                },
+                style = quiet,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() }, indication = null,
+                ) { vm.soundOn = !vm.soundOn },
+            )
+            Text(
+                "details",
+                style = quiet,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() }, indication = null,
                 ) { vm.showDetails = true },
-        )
+            )
+        }
     }
 }
 
