@@ -90,7 +90,7 @@ fun HuntScreen(vm: FinderViewModel) {
     val hint = when {
         vm.huntState == HuntState.CALIBRATING -> if (vm.stepsAvailable) "Walk around a bit" else "Allow motion access for direction"
         vm.huntState == HuntState.LOST -> "Lost it, keep moving"
-        anim.feet < 2 -> "Right here, look down"
+        anim.feet < 2 -> "Should be within your reach"
         vm.trend == Trend.WARMER -> "Warmer"
         vm.trend == Trend.COLDER -> "Colder"
         else -> "Steady"
@@ -98,9 +98,9 @@ fun HuntScreen(vm: FinderViewModel) {
     // Walls weaken the signal too, so a big number can mean "close, behind something".
     val wallNote = when {
         vm.huntState == HuntState.LOST -> null
-        anim.feet > 20 -> "or behind walls"          // same zones as Michelle's lines
-        anim.feet > 12 -> "or in the next room"
-        anim.feet > 6 -> "or in the same room"
+        anim.feet > 20 -> "maybe closer, behind a wall"   // same zones as Michelle's lines,
+        anim.feet > 12 -> "maybe in the next room"        // worded to stand on their own
+        anim.feet > 6 -> "probably in this room"
         else -> null
     }
 
@@ -132,7 +132,15 @@ fun HuntScreen(vm: FinderViewModel) {
                     Text(unit, style = mono, modifier = Modifier.alignByBaseline())
                 }
             }
-            Spacer(Modifier.height(10.dp))
+            // wall note: a footnote to the number, so it sits tight under it
+            Spacer(Modifier.height(2.dp))
+            Box(Modifier.height(16.dp), contentAlignment = Alignment.Center) {
+                if (wallNote != null) {
+                    Text(wallNote, style = TextStyle(fontFamily = SpaceMono, fontSize = 11.sp, color = Color.White.copy(alpha = subAlpha * 0.75f)))
+                }
+            }
+            // then a clear gap, then the instruction
+            Spacer(Modifier.height(18.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val pmAlpha by animateFloatAsState(if (asking) 1f else 0f, tween(300), label = "pm")
                 val pmWidth by animateFloatAsState(if (asking) 20f else 0f, tween(300), label = "pmw")
@@ -140,10 +148,6 @@ fun HuntScreen(vm: FinderViewModel) {
                     PixelMan(vm.huntState, pmPhase.floatValue, f.timeSec)
                 }
                 Text(hint, style = TextStyle(fontFamily = SpaceMono, fontSize = 13.sp, color = Color.White.copy(alpha = subAlpha)))
-            }
-            if (wallNote != null) {
-                Spacer(Modifier.height(4.dp))
-                Text(wallNote, style = TextStyle(fontFamily = SpaceMono, fontSize = 12.sp, color = Color.White.copy(alpha = subAlpha * 0.8f)))
             }
         }
 

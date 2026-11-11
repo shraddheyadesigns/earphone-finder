@@ -20,10 +20,11 @@
   .center { isolation:isolate; position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; text-align:center; padding:0 40px; }
   .num { font-family:var(--numFont, 'Inter Tight'), sans-serif; font-weight:500; font-size:clamp(62px, 10vh, 102px); line-height:1; letter-spacing:-0.025em; display:flex; align-items:baseline; gap:6px; }
   .num .tilde { font-family:'Space Mono', ui-monospace, monospace; color:rgba(255,255,255,var(--subA, .2)); font-size:.5em; }
+  .wall { margin-top:2px; font-size:11px; height:16px; font-family:'Space Mono', ui-monospace, monospace; color:rgba(255,255,255,calc(var(--subA, .2) * .75)); white-space:nowrap; }
   .hint.withman { padding-left:20px; }
   .num .grad { background:linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,.55)); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .num .unit { font-family:'Space Mono', ui-monospace, monospace; color:rgba(255,255,255,var(--subA, .2)); font-size:.32em; }
-  .hint { padding-left:0; transition:padding-left .3s; white-space:nowrap; margin-top:14px; font-size:13px; font-family:'Space Mono', ui-monospace, monospace; color:rgba(255,255,255,var(--subA, .2)); min-height:20px; transition:opacity .4s; }
+  .hint { padding-left:0; transition:padding-left .3s; white-space:nowrap; margin-top:18px; font-size:13px; font-family:'Space Mono', ui-monospace, monospace; color:rgba(255,255,255,var(--subA, .2)); min-height:20px; transition:opacity .4s; }
   .island { position:absolute; top:12px; left:50%; transform:translateX(-50%); width:31%; height:28px; border-radius:20px; background:#000; }
 
   .panel { width:300px; display:flex; flex-direction:column; gap:22px; font-size:14px; }
@@ -53,6 +54,7 @@
       <div class="island"></div>
       <div class="center">
         <div class="num"><span class="tilde">~</span><span id="num" class="grad">24</span><span class="unit" id="unit">ft</span></div>
+        <div class="wall" id="wall"></div>
         <div class="hint" id="hint"></div>
       </div>
     </div>
@@ -409,6 +411,7 @@ function tempJS(h){
 }
 const screenRoot = document.querySelector('.screen');
 
+const wallEl = document.getElementById('wall');
 function updateText(){
   const nearK = Math.max(0, Math.min(1, (D.hot * D.warm - .6) / .35));
   const ns = nearK * nearK * (3 - 2 * nearK);
@@ -419,12 +422,15 @@ function updateText(){
   let hint;
   if (D.state === 'calibrating') hint = 'Walk around a bit';
   else if (D.state === 'lost') hint = 'Lost it, keep moving';
-  else if (D.ft < 2) hint = 'Right here, look down';
+  else if (D.ft < 2) hint = 'Should be within your reach';
   else {
     const d = ftHist.length > 1 ? ftHist[ftHist.length-1][1] - ftHist[0][1] : 0;
     hint = d < -0.6 ? 'Warmer' : d > 0.6 ? 'Colder' : 'Steady';
   }
   if (hint !== lastHint) { hintEl.textContent = hint; lastHint = hint; }
+  // walls weaken the signal too: same zones as the app and Michelle's voice lines
+  const wall = D.state === 'lost' ? '' : D.ft > 20 ? 'maybe closer, behind a wall' : D.ft > 12 ? 'maybe in the next room' : D.ft > 6 ? 'probably in this room' : '';
+  if (wallEl.textContent !== wall) wallEl.textContent = wall;
 }
 
 // ---------- controls ----------
