@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earphone Finder glow prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Inter+Tight:wght@500;600&family=Space+Mono&family=Oswald:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0b0b0c; --fg:#e9e9ea; --dim:#8a8a8f; --accent:#ff7a2a; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:Geist, system-ui, sans-serif; }
+  body { display:flex; gap:56px; align-items:center; justify-content:center; padding:32px; min-height:100vh; }
+  .phone { position:relative; height:min(84vh, 760px); aspect-ratio:9/19.5; border-radius:52px; padding:10px; background:#161617; box-shadow:0 0 0 1px #262628, 0 40px 120px #000; flex:none; }
+  .screen { position:relative; width:100%; height:100%; border-radius:43px; overflow:hidden; background:#050506; touch-action:none; cursor:crosshair; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #fig { pointer-events:none; }
+  .center::before { content:''; position:absolute; left:50%; top:52%; width:120%; height:34%; transform:translate(-50%,-50%); background:radial-gradient(closest-side, rgba(28,10,4,.6), rgba(28,10,4,0)); opacity:var(--scrim, 0); z-index:-1; }
+  .center { isolation:isolate; position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; text-align:center; padding:0 40px; }
+  .num { font-family:var(--numFont, 'Inter Tight'), sans-serif; font-weight:500; font-size:clamp(62px, 10vh, 102px); line-height:1; letter-spacing:-0.025em; display:flex; align-items:baseline; gap:6px; }
+  .num .tilde { font-family:'Space Mono', ui-monospace, monospace; color:rgba(255,255,255,var(--subA, .2)); font-size:.5em; }
+  .hint.withman { padding-left:20px; }
+  .num .grad { background:linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,.55)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .num .unit { font-family:'Space Mono', ui-monospace, monospace; color:rgba(255,255,255,var(--subA, .2)); font-size:.32em; }
+  .hint { padding-left:0; transition:padding-left .3s; white-space:nowrap; margin-top:14px; font-size:13px; font-family:'Space Mono', ui-monospace, monospace; color:rgba(255,255,255,var(--subA, .2)); min-height:20px; transition:opacity .4s; }
+  .island { position:absolute; top:12px; left:50%; transform:translateX(-50%); width:31%; height:28px; border-radius:20px; background:#000; }
+
+  .panel { width:300px; display:flex; flex-direction:column; gap:22px; font-size:14px; }
+  h1 { font-size:20px; font-weight:500; margin:0 0 4px; }
+  .sub { color:var(--dim); margin:0; line-height:1.45; }
+  .group { display:flex; flex-direction:column; gap:10px; }
+  .label { color:var(--dim); font-size:13px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  button { font:inherit; color:var(--fg); background:#1c1c1e; border:0; border-radius:10px; padding:9px 14px; cursor:pointer; }
+  button:hover { background:#252528; }
+  button.on { background:var(--fg); color:#0b0b0c; }
+  .slider { display:grid; grid-template-columns:96px 1fr 44px; align-items:center; gap:10px; }
+  .slider span:last-child { text-align:right; color:var(--dim); font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .disabled { opacity:.35; pointer-events:none; }
+  .progress { height:3px; background:#1c1c1e; border-radius:2px; overflow:hidden; }
+  .progress i { display:block; height:100%; width:0; background:var(--fg); }
+  textarea { width:100%; height:120px; background:#141416; color:var(--fg); border:0; border-radius:10px; padding:10px; font:12px/1.4 ui-monospace, monospace; resize:none; display:none; }
+  @media (max-width: 760px) { body { flex-direction:column; gap:32px; } .panel { width:100%; max-width:380px; } }
+</style>
+</head>
+<body>
+  <div class="phone">
+    <div class="screen" id="screen">
+      <canvas id="gl"></canvas>
+      <canvas id="fig"></canvas>
+      <div class="island"></div>
+      <div class="center">
+        <div class="num"><span class="tilde">~</span><span id="num" class="grad">24</span><span class="unit" id="unit">ft</span></div>
+        <div class="hint" id="hint"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div>
+      <h1>Glow prototype</h1>
+      <p class="sub">Edge glow for the hot/cold hunt. In manual mode you can also drag on the phone to place the earbud.</p>
+    </div>
+
+    <div class="group">
+      <div class="row">
+        <button id="mDemo" class="on">Demo hunt</button>
+        <button id="mManual">Manual</button>
+        <button id="pix" class="on">Dot shimmer</button>
+      </div>
+      <div class="row" id="fonts">
+        <button data-f="Inter Tight" class="on">Inter Tight</button>
+        <button data-f="Oswald">Oswald</button>
+        <button data-f="Space Mono">Space Mono</button>
+      </div>
+      <div class="progress" id="prog"><i></i></div>
+    </div>
+
+    <div class="group" id="manual">
+      <div class="label">State</div>
+      <div class="row">
+        <button data-s="calibrating">Calibrating</button>
+        <button data-s="found">Found</button>
+        <button data-s="lost">Lost</button>
+      </div>
+      <div class="slider"><span class="label">Distance</span><input id="dist" type="range" min="0" max="1000" value="700"><span id="distV"></span></div>
+      <div class="slider"><span class="label">Direction</span><input id="dir" type="range" min="-180" max="180" value="45"><span id="dirV"></span></div>
+    </div>
+
+    <div class="group" id="knobs">
+      <div class="label">Tune the feel</div>
+    </div>
+
+    <div class="group">
+      <div class="row"><button id="copy">Copy values</button><button id="reset">Reset knobs</button></div>
+      <textarea id="out" readonly></textarea>
+    </div>
+  </div>
+
+<script>
+// ---------- tunable knobs (these go into the Android shader) ----------
+const DEFAULTS = {
+  glowWidth: 0.12,   // glow depth, share of the short screen side
+  brightness: 1,
+  spreadFar: 110,    // arc size when far: direction is steady, so a tighter arc
+  spreadNear: 360,   // arc size when on top of it: bearing swings wildly, whole edge glows
+  softness: 45,      // how gently the arc fades out at its ends, in degrees
+  ambient: 0.35,     // whole-screen wash: rust when hot, blue when cold
+  spinFocus: 2.5,    // how gathered the spinning "loader" glow is
+  spinSpeed: 50,     // degrees per second while calibrating
+  settle: 1,         // seconds for the glow to come to rest
+  shimmer: 0.2,      // how alive the flames are
+  flow: 0.5,         // speed of the living motion
+  pixelSize: 6,      // dot grid spacing in screen points, 0 = smooth glow only
+  dotGap: 0.85,      // space around each dot, 0 = dots touch
+  glowMix: 1.5,      // how much of the smooth glow sits under the dots
+  twinkle: 1,        // how much each dot flickers on its own
+  dither: 1,         // ordered dither between brightness steps
+};
+const RANGES = {
+  glowWidth:[0.04,0.3,0.01], brightness:[0.4,2.5,0.05], spreadFar:[20,360,5], spreadNear:[20,360,5], softness:[5,120,5], ambient:[0,1,0.05], spinFocus:[0.5,8,0.1],
+  spinSpeed:[15,300,5], settle:[0.2,3,0.05], shimmer:[0,1,0.05], flow:[0.1,3,0.05],
+  pixelSize:[0,12,0.5], dotGap:[0,0.85,0.05], glowMix:[0,1.5,0.05], twinkle:[0,1,0.05], dither:[0,1,0.05],
+};
+const NAMES = { glowWidth:'Glow width', brightness:'Brightness', spreadFar:'Spread far', spreadNear:'Spread near', softness:'Arc softness', ambient:'Screen wash', spinFocus:'Loader focus',
+  spinSpeed:'Spin speed', settle:'Settle time', shimmer:'Shimmer', flow:'Flow speed',
+  pixelSize:'Dot size', dotGap:'Dot spacing', glowMix:'Glow under', twinkle:'Twinkle', dither:'Dither' };
+const K = { ...DEFAULTS };
+
+const knobsEl = document.getElementById('knobs');
+const knobInputs = {};
+for (const k of Object.keys(DEFAULTS)) {
+  const [mn, mx, st] = RANGES[k];
+  const row = document.createElement('div'); row.className = 'slider';
+  row.innerHTML = `<span class="label">${NAMES[k]}</span><input type="range" min="${mn}" max="${mx}" step="${st}" value="${K[k]}"><span></span>`;
+  const inp = row.querySelector('input'), val = row.querySelector('span:last-child');
+  const show = () => { val.textContent = (+inp.value).toFixed(st < 0.1 ? 2 : st < 1 ? 1 : 0); };
+  inp.addEventListener('input', () => { K[k] = +inp.value; show(); });
+  show(); knobInputs[k] = inp; knobsEl.appendChild(row);
+}
+document.getElementById('reset').onclick = () => {
+  for (const k in DEFAULTS) { K[k] = DEFAULTS[k]; knobInputs[k].value = K[k]; knobInputs[k].dispatchEvent(new Event('input')); }
+};
+document.getElementById('copy').onclick = async () => {
+  const txt = JSON.stringify(K, null, 2);
+  const out = document.getElementById('out');
+  out.value = txt; out.style.display = 'block';
+  try { await navigator.clipboard.writeText(txt); document.getElementById('copy').textContent = 'Copied'; }
+  catch { out.select(); document.getElementById('copy').textContent = 'Select and copy'; }
+  setTimeout(() => document.getElementById('copy').textContent = 'Copy values', 1600);
+};
+
+let lastPix = DEFAULTS.pixelSize || 6;
+const pixBtn = document.getElementById('pix');
+function syncPixBtn(){ pixBtn.classList.toggle('on', K.pixelSize > 0); }
+pixBtn.onclick = () => {
+  if (K.pixelSize > 0) { lastPix = K.pixelSize; K.pixelSize = 0; } else K.pixelSize = lastPix;
+  knobInputs.pixelSize.value = K.pixelSize; knobInputs.pixelSize.dispatchEvent(new Event('input'));
+};
+knobInputs.pixelSize.addEventListener('input', syncPixBtn);
+
+document.querySelectorAll('[data-f]').forEach(b => b.onclick = () => {
+  document.querySelector('.screen').style.setProperty('--numFont', `'${b.dataset.f}'`);
+  document.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b));
+});
+
+// ---------- WebGL edge glow ----------
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl', { premultipliedAlpha:false, antialias:false });
+const VS = `attribute vec2 p; void main(){ gl_Position = vec4(p,0.,1.); }`;
+const FS = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime, uDir, uFocus, uHot, uWarm, uWidth, uBright, uShimmer, uRadius, uFlow;
+uniform float uPix, uTwinkle, uDither, uGap, uGlowMix, uSpread, uSoft, uAmbient, uSpinFocus;
+
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+  return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+}
+float fbm(vec2 p){ float v = 0., a = .5; for(int i=0;i<4;i++){ v += a*noise(p); p *= 2.03; a *= .5; } return v; }
+float sdRoundBox(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(q,0.)) + min(max(q.x,q.y),0.) - r; }
+float bayer2(vec2 a){ a = floor(a); return fract(a.x/2. + a.y*a.y*.75); }
+float bayer4(vec2 a){ return bayer2(.5*a)*.25 + bayer2(a); }
+
+// closeness c: 0 = legit far (faint blue), .37 = ~10 ft (icy blue), .48 = ~7 ft (pale steel),
+// .6 = ~5 ft (warm peach-ember), .8 = orange, 1 = ~1 ft (yellow at the edge).
+// Brightness only ever goes UP as you close in: dimming would read as "colder".
+vec3 temp(float c){
+  vec3 k0 = vec3(.12,.22,.38);
+  vec3 k1 = vec3(.32,.68,1.0);
+  vec3 k2 = vec3(.62,.86,1.0);
+  vec3 k3 = vec3(1.0,.56,.26);
+  vec3 k4 = vec3(1.0,.36,.07);
+  vec3 k5 = vec3(1.0,.64,.22);
+  if (c < .37) return mix(k0, k1, smoothstep(0., .37, c));
+  if (c < .48) return mix(k1, k2, smoothstep(.37, .48, c));
+  if (c < .60) return mix(k2, k3, smoothstep(.48, .60, c));
+  if (c < .80) return mix(k3, k4, smoothstep(.60, .80, c));
+  return mix(k4, k5, smoothstep(.80, 1., c));
+}
+float lumAt(float c){ return c < .37 ? mix(.45, 1.0, smoothstep(0., .37, c)) : mix(1.0, 1.2, smoothstep(.37, 1., c)); }
+
+float dirWeight(float ang0){
+  float cd = cos(ang0 - uDir);
+  float loaderW = exp(uSpinFocus * (cd - 1.));
+  float ang = acos(clamp(cd, -1., 1.));
+  float arcW = (1. - smoothstep(uSpread, uSpread + uSoft, ang)) * (.35 + .3*exp(1.5*(cd - 1.)));
+  return mix(loaderW, arcW, uWarm);
+}
+
+vec3 glowAt(vec2 px){
+  vec2 h = uRes*.5;
+  vec2 q = px - h;                            // y up
+  float m = min(uRes.x, uRes.y);
+  float e = max(-sdRoundBox(q, h, max(uRadius, .42*m)), 0.);   // px in from the edge, extra round so it never looks like a frame
+  // the glow grows deeper as you close in
+  // up close the edge glow melts away into the screen wash
+  float near = smoothstep(.72, 1., uHot) * uWarm;
+  float w = uWidth * m * (1. + .35*uHot*uWarm) * (1. - .45*near);
+
+  // direction comes from the nearest point on the edge, so light flows straight in
+  // instead of converging on the centre
+  vec2 n = q / h;
+  float dxs = (1. - abs(n.x)) * h.x, dys = (1. - abs(n.y)) * h.y;
+  vec2 bx = vec2(sign(n.x), n.y), by = vec2(n.x, sign(n.y));
+  vec2 b = mix(bx, by, smoothstep(-.16*m, .16*m, dxs - dys));
+  float a = atan(b.x, b.y);
+
+  float t = uTime * uFlow * (0.6 + 0.9*uHot*uWarm);
+  float f = fbm(vec2(a*2.6 + t*.15, e/w*1.4 - t*.9));
+  float f2 = fbm(vec2(a*7.0 - t*.2, e/w*3.0 - t*1.6));
+  float flame = mix(1., .35 + 1.25*f + .35*f2, uShimmer);
+
+  // a rounder depth for the long soft tail, so the inside never shows a box shape
+  vec2 an = abs(q / h);
+  float rr = pow(pow(an.x, 3.) + pow(an.y, 3.), 1./3.);
+  float eS = (1. - rr) * .5 * m;
+  // core hugs the edge (edge-based angle); the long tail uses a seamless centre-based angle
+  float aC = atan(q.x / h.x, q.y / h.y);
+  float g = .62*exp(-e/w)*dirWeight(a) + .38*exp(-eS/(w*3.2))*dirWeight(aC);
+  g *= flame;
+  float clear = smoothstep(.04*m, .46*m, eS);
+  g *= 1. - clear*clear*(3. - 2.*clear);   // fade very gradually toward a clear middle
+  g *= 1. - .35*near;
+
+
+
+  vec3 slate = vec3(.52,.60,.72);
+  vec3 tc = temp(uHot);
+  vec3 hotCore = tc + vec3(.2,.2,.04) * smoothstep(.75,1.,uHot) * exp(-e/(w*(.5 + 1.4*smoothstep(.75,1.,uHot))));
+  vec3 hotTail = tc * vec3(1.,.7,.6);
+  vec3 warmCol = mix(hotTail, hotCore, exp(-e/(w*.9)));
+  vec3 col = mix(slate * (1. - .35*(1.-exp(-e/w))), warmCol, uWarm);
+  float lum = mix(.8, lumAt(uHot), uWarm);
+
+  vec3 c = col * g * uBright * lum;
+  return 1. - exp(-c * 1.25);                // soft tone map
+}
+
+// whole-screen wash: strongest when very hot or very cold, leaning toward the bud's side
+vec3 ambientAt(vec2 px){
+  vec2 q = (px - uRes*.5) / (uRes*.5);
+  float aPix = atan(q.x, q.y);
+  float near = smoothstep(.72, 1., uHot) * uWarm;
+  float lean = mix(pow(.5 + .5*cos(aPix - uDir), 1.5), 1., near);
+  float heat = .35*smoothstep(.1, .45, uHot) + .65*smoothstep(.5, .95, uHot);   // wash only ever builds as you close in
+  vec3 tc = temp(uHot) * mix(vec3(1.), vec3(.75,.42,.28), smoothstep(.55, .85, uHot)); // rusty, not neon
+  float lvl = uAmbient * uWarm * (.06 + .5*heat + .25*near) * (.35 + .65*lean) * uBright;
+  return tc * lvl;
+}
+
+void main(){
+  vec2 px = gl_FragCoord.xy;
+  vec3 smoothGlow = glowAt(px) + (hash(px + fract(uTime)) - .5) / 128.;
+  vec3 c;
+  if (uPix > .5) {
+    vec2 cell = floor(px / uPix);
+    vec2 local = fract(px / uPix) - .5;
+    vec2 cc = (cell + .5) * uPix;
+    vec3 d = glowAt(cc);
+    // from ~7 ft in, sparse dots start creeping toward the centre, more at 5 ft, most at 1 ft
+    float inDots = pow(clamp((uHot - .44) / .53, 0., 1.), .75) * uWarm;
+    if (inDots > 0.) {
+      float patch = smoothstep(.40, .66, fbm(cc / min(uRes.x, uRes.y) * 5. + vec2(uTime*.05, -uTime*.08)));
+      // only every other cell, both ways: wider spacing than the edge dots
+      float sparse = (1. - step(.5, mod(cell.x, 2.))) * (1. - step(.5, mod(cell.y, 2.)));
+      // keep the area behind the number and subtext free of creeping dots
+      vec2 tq = (cc - vec2(.5, .47) * uRes) / (vec2(.40, .11) * uRes);
+      sparse *= smoothstep(.8, 1.5, length(tq));
+      vec3 tint = max(ambientAt(cc), temp(uHot) * .12);
+      d += tint * 6.0 * inDots * patch * sparse;
+    }
+    // each dot breathes on its own clock, faster when hot
+    float h1 = hash(cell), h2 = hash(cell + 17.3);
+    float speed = (1.5 + 3.*h2) * (0.6 + 1.2*uHot*uWarm);
+    float tw = .5 + .5*sin(uTime*speed + h1*6.2832);
+    float spark = step(.992, hash(cell + floor(uTime*6. + h1*10.)));
+    d *= mix(1., .35 + .9*tw, uTwinkle) + spark*uTwinkle*1.4*length(d);
+    // ordered dither into a few brightness steps
+    float L = max(max(d.r, d.g), d.b);
+    if (L > 0.) {
+      float lv = 5.;
+      float qv = floor(L*lv + bayer4(cell) * uDither + (1.-uDither)*.5) / lv;
+      d *= qv / L;
+    }
+    // round dots with breathing room around them
+    float r = .5 * (1. - uGap);
+    float aa = 1. / uPix;
+    float dotMask = 1. - smoothstep(r - aa, r + aa, length(local));
+    d *= dotMask * 1.6;
+    // smooth glow underneath, dots on top
+    c = smoothGlow * uGlowMix + d;
+  } else {
+    c = smoothGlow;
+  }
+  c += ambientAt(px);
+  gl_FragColor = vec4(c + vec3(.012,.012,.016), 1.);
+}`;
+function sh(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s)); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog); gl.useProgram(prog);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+const U = {}; for (const u of ['uRes','uTime','uDir','uFocus','uHot','uWarm','uWidth','uBright','uShimmer','uRadius','uFlow','uPix','uTwinkle','uDither','uGap','uGlowMix','uSpread','uSoft','uAmbient','uSpinFocus']) U[u] = gl.getUniformLocation(prog, u);
+
+function resize(){
+  const r = canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+addEventListener('resize', resize); resize();
+
+// ---------- what the engine would feed in ----------
+const target = { state:'calibrating', ft:24, dirDeg:70 };
+let mode = 'demo';
+
+// demo hunt, ~30 s loop: [t, state, ft, dirDeg]
+const SCRIPT = [
+  [0,  'calibrating', 24, 70], [6,  'found', 22, 70], [14, 'found', 9, 35],
+  [14.01,'lost', 9, 35], [16.5,'found', 8.5, 28], [24, 'found', 2, 5], [27, 'found', 0.9, 0], [30, 'found', 0.9, 0],
+];
+const DEMO_LEN = 30;
+function demoAt(t){
+  for (let i = SCRIPT.length - 1; i >= 0; i--) if (t >= SCRIPT[i][0]) {
+    const a = SCRIPT[i], b = SCRIPT[Math.min(i+1, SCRIPT.length-1)];
+    const k = b[0] > a[0] ? (t - a[0]) / (b[0] - a[0]) : 0;
+    return { state:a[1], ft:a[2] + (b[2]-a[2])*k, dirDeg:a[3] + (b[3]-a[3])*k };
+  }
+}
+
+// ---------- display state, eased every frame ----------
+const D = { dir:0, v:0, warm:0, hot:0, ft:24, state:'calibrating', unwrapped:null };
+const TAU = Math.PI*2;
+const hotFromFt = ft => Math.min(1, Math.max(0, 1 - Math.log(Math.max(ft, .9) / .9) / Math.log(40 / .9)));
+const shortest = d => ((d % TAU) + TAU*1.5) % TAU - Math.PI;
+const ease = (x, to, dt, tau) => x + (to - x) * (1 - Math.exp(-dt / Math.max(tau, 1e-3)));
+
+let ftHist = [];
+function step(dt, now){
+  const tgt = target;
+  const tDir = tgt.dirDeg * Math.PI/180;
+
+  if (tgt.state !== D.state) {
+    if (tgt.state === 'found') D.unwrapped = D.dir + ((tDir - D.dir) % TAU + TAU) % TAU; // keep spinning the same way into place
+    D.state = tgt.state;
+  }
+
+  if (D.state === 'found') {
+    // target moved while found: take the short way
+    D.unwrapped += shortest(tDir - D.unwrapped);
+    const w = 4.6 / K.settle;                     // critically damped spring
+    const acc = w*w*(D.unwrapped - D.dir) - 2*w*D.v;
+    D.v += acc*dt; D.dir += D.v*dt;
+    
+    D.warm = ease(D.warm, 1, dt, K.settle*.5);
+  } else {
+    const spin = K.spinSpeed * Math.PI/180;
+    D.v = ease(D.v, spin, dt, .6); D.dir += D.v*dt;
+    D.warm = ease(D.warm, 0, dt, .5);
+  }
+  D.ft = ease(D.ft, tgt.ft, dt, .6);
+  D.hot = ease(D.hot, hotFromFt(D.ft), dt, .4);
+
+  ftHist.push([now, D.ft]); while (ftHist.length && now - ftHist[0][0] > 1500) ftHist.shift();
+}
+
+// ---------- centre text ----------
+const numEl = document.getElementById('num'), unitEl = document.getElementById('unit'), hintEl = document.getElementById('hint');
+function fmtFt(ft){
+  if (ft > 32) return ['far', ''];
+  if (ft < 10) return [String(Math.max(1, Math.round(ft))), 'ft'];  // never says 0
+  return [String(Math.round(ft/5)*5), 'ft'];
+}
+let lastHint = '';
+// same palette as the shader, lifted so the small text stays readable
+function tempJS(h){
+  const st = [[0,[.32,.68,1]],[.40,[.10,.20,.34]],[.52,[.42,.10,.03]],[.80,[1,.36,.07]],[1,[1,.58,.18]]];
+  for (let i = 0; i < st.length - 1; i++) {
+    const [a, ca] = st[i], [b, cb] = st[i+1];
+    if (h <= b) { let k = (h - a) / (b - a); k = k*k*(3-2*k); return ca.map((v, j) => v + (cb[j] - v) * k); }
+  }
+  return st[st.length-1][1];
+}
+const screenRoot = document.querySelector('.screen');
+
+function updateText(){
+  const nearK = Math.max(0, Math.min(1, (D.hot * D.warm - .6) / .35));
+  const ns = nearK * nearK * (3 - 2 * nearK);
+  screenEl.style.setProperty('--scrim', ns.toFixed(3));
+  screenEl.style.setProperty('--subA', (.2 + .18 * ns).toFixed(3));
+  const [n, u] = fmtFt(D.ft);
+  numEl.textContent = n; unitEl.textContent = u;
+  let hint;
+  if (D.state === 'calibrating') hint = 'Walk around a bit';
+  else if (D.state === 'lost') hint = 'Lost it, keep moving';
+  else if (D.ft < 2) hint = 'Right here, look down';
+  else {
+    const d = ftHist.length > 1 ? ftHist[ftHist.length-1][1] - ftHist[0][1] : 0;
+    hint = d < -0.6 ? 'Warmer' : d > 0.6 ? 'Colder' : 'Steady';
+  }
+  if (hint !== lastHint) { hintEl.textContent = hint; lastHint = hint; }
+}
+
+// ---------- controls ----------
+const distEl = document.getElementById('dist'), dirEl = document.getElementById('dir');
+const sliderToFt = v => Math.round(Math.exp(Math.log(45) - Math.log(45/0.9) * v/1000) * 10) / 10; // right = closer
+const ftToSlider = ft => 1000 * (Math.log(45) - Math.log(ft)) / Math.log(45/0.9);
+function readManual(){
+  target.ft = sliderToFt(+distEl.value); target.dirDeg = +dirEl.value;
+  document.getElementById('distV').textContent = target.ft.toFixed(target.ft < 10 ? 1 : 0);
+  document.getElementById('dirV').textContent = target.dirDeg + '°';
+}
+distEl.addEventListener('input', readManual); dirEl.addEventListener('input', readManual);
+const stateBtns = [...document.querySelectorAll('[data-s]')];
+function markState(){ stateBtns.forEach(b => b.classList.toggle('on', b.dataset.s === target.state)); }
+stateBtns.forEach(b => b.onclick = () => { target.state = b.dataset.s; markState(); });
+
+const manualEl = document.getElementById('manual'), progEl = document.querySelector('#prog i');
+function setMode(m){
+  mode = m;
+  document.getElementById('mDemo').classList.toggle('on', m === 'demo');
+  document.getElementById('mManual').classList.toggle('on', m === 'manual');
+  manualEl.classList.toggle('disabled', m === 'demo');
+  document.getElementById('prog').style.visibility = m === 'demo' ? 'visible' : 'hidden';
+  if (m === 'manual') {
+    distEl.value = ftToSlider(Math.max(1, target.ft)); dirEl.value = Math.round(target.dirDeg);
+    readManual(); markState();
+  } else demoStart = performance.now();
+}
+document.getElementById('mDemo').onclick = () => setMode('demo');
+document.getElementById('mManual').onclick = () => setMode('manual');
+
+// drag on the phone to place the bud (manual mode)
+const screenEl = document.getElementById('screen');
+function placeFromPointer(ev){
+  if (mode !== 'manual') setMode('manual');
+  const r = screenEl.getBoundingClientRect();
+  const nx = (ev.clientX - r.left - r.width/2) / (r.width/2), ny = -(ev.clientY - r.top - r.height/2) / (r.height/2);
+  target.dirDeg = Math.round(Math.atan2(nx, ny) * 180/Math.PI);
+  dirEl.value = target.dirDeg; readManual();
+  if (target.state !== 'found') { target.state = 'found'; markState(); }
+}
+let dragging = false;
+screenEl.addEventListener('pointerdown', e => { dragging = true; screenEl.setPointerCapture(e.pointerId); placeFromPointer(e); });
+screenEl.addEventListener('pointermove', e => { if (dragging) placeFromPointer(e); });
+screenEl.addEventListener('pointerup', () => dragging = false);
+
+// ---------- crosswalk walker, drawn in dots ----------
+// Pixel Man. Calibrating: walks. Lost: stops and looks left, right. Found: slides left and fades out.
+// a 7 x 9 glyph: same height as the subtext, so it reads like one more character
+const SPR = {
+  stride: ['...##..','...##..','.......','..###..','.#.##.#','...##..','..#..#.','.#....#','#......'],
+  mid: ['...##..','...##..','.......','..###..','..###..','...##..','...#.#.','..#..#.','..#....'],
+  pass: ['...##..','...##..','.......','...##..','...##..','...##..','...#...','...#...','..##...'],
+};
+function dotsOf(rows, mirror){
+  const out = [], w = rows[0].length;
+  rows.forEach((r, y) => [...r].forEach((ch, x) => { if (ch === '#') out.push([mirror ? w - 1 - x : x, y]); }));
+  return out;
+}
+const WALK = [dotsOf(SPR.stride), dotsOf(SPR.mid), dotsOf(SPR.pass), dotsOf(SPR.mid)];
+const FACE_R = dotsOf(SPR.pass), FACE_L = dotsOf(SPR.pass, true);
+const figCanvas = document.getElementById('fig'), fx = figCanvas.getContext('2d');
+const FIG = { alpha: 0, prevState: 'calibrating', exit: null, seed: [...Array(400)].map(() => Math.random()) };
+
+// Pixel Man sits next to the subtext, only when the app is asking you to move.
+// Calibrating: walks (an instruction). Lost: looks around.
+// Found: walks only while the signal is actually changing, faster when it changes faster.
+// Stands still when the signal holds, e.g. you're circling at the same distance.
+const PM = { phase: 0, walking: false, speed: 0, hist: [], alpha: 0 };
+const STAND = dotsOf(SPR.pass);
+
+function pmFrame(t, dt){
+  if (D.state === 'calibrating') { PM.phase += dt * 6; return WALK[((Math.floor(PM.phase) % 4) + 4) % 4]; }
+  if (D.state === 'lost') {
+    const k = t % 3.6;
+    if (k < .9) return FACE_R; if (k < 1.8) return FACE_L; if (k < 2.6) return FACE_R;
+    PM.phase += dt * 6; return WALK[((Math.floor(PM.phase) % 4) + 4) % 4];
+  }
+  // found: how fast is closeness changing? (smoothed engine value, per second)
+  const now = t;
+  PM.hist.push([now, D.hot]); while (PM.hist.length && now - PM.hist[0][0] > 1.2) PM.hist.shift();
+  const rate = PM.hist.length > 1 ? Math.abs(PM.hist[PM.hist.length-1][1] - PM.hist[0][1]) / Math.max(.2, now - PM.hist[0][0]) : 0;
+  // hysteresis so noise doesn't make him twitch
+  if (!PM.walking && rate > .012) PM.walking = true;
+  if (PM.walking && rate < .006) PM.walking = false;
+  const target = PM.walking ? Math.min(9, 3 + rate * 120) : 0;   // steps per second
+  PM.speed += (target - PM.speed) * (1 - Math.exp(-dt / .35));
+  if (PM.speed > .4) { PM.phase += dt * PM.speed; return WALK[((Math.floor(PM.phase) % 4) + 4) % 4]; }
+  return STAND;
+}
+
+function drawFigure(now, dt){
+  const r = figCanvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+  if (figCanvas.width !== Math.round(r.width*dpr)) { figCanvas.width = Math.round(r.width*dpr); figCanvas.height = Math.round(r.height*dpr); }
+  fx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fx.clearRect(0, 0, r.width, r.height);
+  const t = now / 1000;
+  const pitch = 1.9, rad = pitch * .34;   // ~17px tall, with a little air between the dots
+
+  // sit just left of the subtext's first letter, vertically centred on it
+  const range = document.createRange(); range.selectNodeContents(hintEl);
+  const tr = range.getBoundingClientRect();
+  const ox = (tr.left - r.left) - 7*pitch - 6, oy = (tr.top - r.top) + tr.height/2 - 9*pitch/2;
+
+  // only shows when the app is asking you to move: calibrating or lost
+  const asking = D.state !== 'found';
+  hintEl.classList.toggle('withman', asking);
+  PM.alpha += ((asking ? 1 : 0) - PM.alpha) * (1 - Math.exp(-dt / .15));
+  if (PM.alpha < .01) { pmFrame(t, dt); return; }
+  const dots = pmFrame(t, dt);
+  fx.fillStyle = 'rgb(255,255,255)';
+  fx.globalAlpha = .32 * PM.alpha;              // a touch stronger than the 20% subtext, still quiet
+  for (const [x, y] of dots) { fx.beginPath(); fx.arc(ox + x*pitch + pitch/2, oy + y*pitch + pitch/2, rad, 0, Math.PI*2); fx.fill(); }
+  fx.globalAlpha = 1;
+}
+
+// ---------- loop ----------
+let demoStart = performance.now(), last = performance.now(), t0 = performance.now();
+setMode('demo');
+function frame(now){
+  const dt = Math.max(0, Math.min(.05, (now - last) / 1000)); last = now;
+  if (mode === 'demo') {
+    const t = ((now - demoStart) / 1000) % DEMO_LEN;
+    Object.assign(target, demoAt(t));
+    progEl.style.width = (t / DEMO_LEN * 100) + '%';
+  }
+  step(dt, now);
+  updateText();
+  drawFigure(now, dt);
+
+  const r = canvas.getBoundingClientRect(), dpr = canvas.width / Math.max(r.width, 1);
+  gl.uniform2f(U.uRes, canvas.width, canvas.height);
+  gl.uniform1f(U.uTime, (now - t0) / 1000);
+  gl.uniform1f(U.uDir, D.dir);
+  gl.uniform1f(U.uHot, D.hot);
+  gl.uniform1f(U.uWarm, D.warm);
+  gl.uniform1f(U.uWidth, K.glowWidth);
+  gl.uniform1f(U.uBright, K.brightness);
+  gl.uniform1f(U.uShimmer, K.shimmer);
+  gl.uniform1f(U.uFlow, K.flow);
+  gl.uniform1f(U.uRadius, 43 * dpr);
+  gl.uniform1f(U.uPix, K.pixelSize > 0 ? Math.max(2, Math.round(K.pixelSize * dpr)) : 0);
+  gl.uniform1f(U.uTwinkle, K.twinkle);
+  gl.uniform1f(U.uDither, K.dither);
+  gl.uniform1f(U.uGap, K.dotGap);
+  gl.uniform1f(U.uGlowMix, K.glowMix);
+  // arc widens as you close in: up close the bearing swings fast and the bud is often below you
+  const near = D.hot * D.hot * (3 - 2 * D.hot);
+  const spreadNow = K.spreadFar + (K.spreadNear - K.spreadFar) * near;
+  gl.uniform1f(U.uSpread, Math.min(spreadNow, 359) / 2 * Math.PI/180);
+  gl.uniform1f(U.uSoft, K.softness * Math.PI/180);
+  gl.uniform1f(U.uAmbient, K.ambient);
+  gl.uniform1f(U.uSpinFocus, K.spinFocus);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
