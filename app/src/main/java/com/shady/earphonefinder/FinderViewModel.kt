@@ -94,6 +94,14 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
     var stepCount by mutableStateOf(0); private set
     var showDetails by mutableStateOf(false)
 
+    // ---------- spin test as a direction source ----------
+    private var spinBearingDeg: Double? = null
+    private var spinAt = 0L
+    private var spinSteps = 0
+    private var walkLocked = false
+    private var walkLockedAt = 0L
+    var spinNote by mutableStateOf<String?>(null)
+
     /** Where the bud is relative to the top of the phone, degrees clockwise. */
     val relativeDirDeg: Double?
         get() {
@@ -290,10 +298,22 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         if (v != null) feet = Proximity.metres(v) * 3.281
         val est = bearing.update(t)
         bearingConfidence = est?.confidence ?: 0.0
-        if (bearing.locked && est != null) bearingDeg = est.bearingDeg
+        if (bearing.locked && !walkLocked) walkLockedAt = t
+        walkLocked = bearing.locked
+
+        // A spin result is a fresh, strong reading, but it goes stale as you walk away from that spot.
+        val spin = spinBearingDeg
+        val spinValid = spin != null && t - spinAt < 90_000 && bearing.steps - spinSteps < 12
+        if (spin != null && !spinValid) spinBearingDeg = null
+        // use whichever direction source is newest
+        bearingDeg = when {
+            spinValid && (!bearing.locked || spinAt >= walkLockedAt) -> spin
+            bearing.locked && est != null -> est.bearingDeg
+            else -> null
+        }
         huntState = when {
             since != null && since > 8_000 -> HuntState.LOST   // some buds advertise only ~1-2x a second
-            bearing.locked -> HuntState.FOUND
+            bearingDeg != null -> HuntState.FOUND
             else -> HuntState.CALIBRATING
         }
         updateGuide(t)
@@ -308,6 +328,7 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         smoothed = null; lastRaw = null; trend = Trend.UNKNOWN; hotness = 0f
         sweepResult = null; sweeping = false
         bearing.reset(); bearingDeg = null; bearingConfidence = 0.0; stepCount = 0
+        spinBearingDeg = null; spinNote = null; walkLocked = false; walkLockedAt = 0L
         feet = null; huntState = HuntState.CALIBRATING; showDetails = false
         zone = null; zoneCandidate = null; lastLineAt = 0; lastCalibrateAt = 0; lastLostAt = 0
         prevHunt = HuntState.CALIBRATING
@@ -336,6 +357,7 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- direction ----------
 
     fun startSweep() {
+        spinNote = null
         sweep.reset()
         sweepCoverage = 0f
         sweepResult = null
@@ -344,8 +366,19 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
 
     fun finishSweep() {
         sweeping = false
-        sweepResult = sweep.result()
-        if (sweepResult == null) error = "Not enough of the circle covered. Turn a full circle, slowly."
+        val r = sweep.result()
+        sweepResult = r
+        when {
+            r == null -> spinNote = "Not enough of the circle. Try again, slower"
+            r.spreadDb < 4 -> spinNote = "Didn't catch it. Try again, slower"
+            else -> {
+                // strong enough: this becomes the hunt's direction
+                spinBearingDeg = r.headingDeg
+                spinAt = now()
+                spinSteps = bearing.steps
+                spinNote = null
+            }
+        }
     }
 
     fun cancelSweep() {

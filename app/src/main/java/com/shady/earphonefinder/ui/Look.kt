@@ -103,7 +103,7 @@ fun ToggleLine(label: String, on: Boolean, onClick: () -> Unit) {
 fun Modifier.panel(): Modifier =
     this.clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.04f))
 
-enum class Glyph { EARBUD_LEFT, EARBUD_RIGHT, STOP }
+enum class Glyph { EARBUD_LEFT, EARBUD_RIGHT, STOP, SPIN }
 
 /** A real button: soft fill, small drawn icon, mono label. */
 @Composable
@@ -127,6 +127,20 @@ fun IconButtonLike(label: String, glyph: Glyph?, onClick: () -> Unit) {
 private fun DrawScope.drawGlyph(g: Glyph) {
     val c = Color.White.copy(alpha = 0.85f)
     val w = size.width; val h = size.height
+    if (g == Glyph.SPIN) {
+        // a circular arrow
+        val sw = 1.7.dp.toPx()
+        val r = w * 0.34f
+        drawArc(c, startAngle = -60f, sweepAngle = 290f, useCenter = false,
+            topLeft = Offset(w / 2 - r, h / 2 - r), size = Size(r * 2, r * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        val tip = Offset(w / 2 + r * 0.5f, h / 2 - r * 0.866f)
+        val head = Path().apply {
+            moveTo(tip.x + w * 0.16f, tip.y - h * 0.02f); lineTo(tip.x - w * 0.02f, tip.y - h * 0.14f); lineTo(tip.x - w * 0.02f, tip.y + h * 0.12f); close()
+        }
+        drawPath(head, c)
+        return
+    }
     if (g == Glyph.STOP) {
         drawRoundRect(c, topLeft = Offset(w * 0.22f, h * 0.22f), size = Size(w * 0.56f, h * 0.56f), cornerRadius = CornerRadius(2.dp.toPx()))
         return

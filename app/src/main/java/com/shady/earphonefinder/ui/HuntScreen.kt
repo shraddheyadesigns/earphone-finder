@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -83,7 +84,7 @@ fun HuntScreen(vm: FinderViewModel) {
     val f = frame.value
     // only ask you to move when it helps: cold and no direction yet, or lost. When you're warm, just guide.
     val farOrUnknown = vm.feet?.let { it > 10 } ?: true
-    val asking = vm.huntState == HuntState.LOST || (vm.huntState == HuntState.CALIBRATING && farOrUnknown)
+    val asking = vm.sweeping || vm.huntState == HuntState.LOST || (vm.huntState == HuntState.CALIBRATING && farOrUnknown)
     // up close the background gets bright: add a soft shadow and lift the subtext a little
     val nearK = ((f.closeness * f.warm - 0.6f) / 0.35f).coerceIn(0f, 1f)
     val scrim = nearK * nearK * (3 - 2 * nearK)
@@ -93,6 +94,8 @@ fun HuntScreen(vm: FinderViewModel) {
     // lost: don't show a stale distance as if it were live
     val (num, unit) = if (lost) "lost" to "" else GlowAnimator.formatFeet(anim.feet)
     val hint = when {
+        vm.sweeping -> "Turn slowly in a full circle"
+        vm.spinNote != null && vm.huntState == HuntState.CALIBRATING -> vm.spinNote!!
         vm.huntState == HuntState.CALIBRATING && farOrUnknown ->
             if (vm.stepsAvailable) "Move around to find the direction" else "Allow motion access for direction"
         vm.huntState == HuntState.LOST -> "Lost it, keep moving"
@@ -169,6 +172,29 @@ fun HuntScreen(vm: FinderViewModel) {
                         PixelMan(vm.huntState, pmPhase.floatValue, f.timeSec)
                     }
                     Text(hint, style = TextStyle(fontFamily = SpaceMono, fontSize = 13.sp, color = Color.White.copy(alpha = subAlpha)))
+                }
+                if (vm.sweeping) {
+                    Spacer(Modifier.height(12.dp))
+                    Box(Modifier.width(140.dp).height(2.dp).background(Color.White.copy(alpha = 0.1f))) {
+                        Box(Modifier.fillMaxWidth(vm.sweepCoverage.coerceIn(0f, 1f)).height(2.dp).background(Color.White.copy(alpha = 0.6f)))
+                    }
+                }
+            }
+
+            // spin to find direction: the strongest direction source on most phones
+            Row(
+                Modifier.align(Alignment.BottomCenter).safeDrawingPadding().padding(bottom = 64.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                when {
+                    !vm.compassAvailable -> {}
+                    vm.sweeping -> {
+                        if (vm.sweepCoverage >= 0.75f) IconButtonLike("done", null) { vm.finishSweep() }
+                        IconButtonLike("cancel", null) { vm.cancelSweep() }
+                    }
+                    else -> IconButtonLike(
+                        if (vm.huntState == HuntState.FOUND) "spin again" else "spin to find direction", Glyph.SPIN,
+                    ) { vm.startSweep() }
                 }
             }
 
