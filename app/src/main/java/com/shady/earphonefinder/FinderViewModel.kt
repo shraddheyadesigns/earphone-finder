@@ -125,16 +125,18 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         ft > 20 -> GuideAudio.Line.OVER_20
         ft > 12 -> GuideAudio.Line.WITHIN_15
         ft > 6 -> GuideAudio.Line.WITHIN_10
-        else -> GuideAudio.Line.WITHIN_5
+        ft > 2.5 -> GuideAudio.Line.WITHIN_5
+        else -> GuideAudio.Line.WITHIN_REACH          // matches "Should be within your reach" on screen
     }
 
-    /** Zone with a 1.5 ft buffer, so standing on a boundary doesn't flip-flop. */
+    /** Zone with a buffer (30% of the distance, 0.4 to 1.5 ft), so standing on a boundary doesn't flip-flop. */
     private fun zoneFor(ft: Double): GuideAudio.Line {
         val cur = zone ?: return rawZone(ft)
         val cand = rawZone(ft)
         if (cand == cur) return cur
         val closer = cand.ordinal > cur.ordinal
-        return if (rawZone(if (closer) ft + 1.5 else ft - 1.5) == cand) cand else cur
+        val margin = (ft * 0.3).coerceIn(0.4, 1.5)
+        return if (rawZone(if (closer) ft + margin else ft - margin) == cand) cand else cur
     }
 
     private fun say(line: GuideAudio.Line, t: Long): Boolean {

@@ -90,7 +90,7 @@ fun HuntScreen(vm: FinderViewModel) {
     val hint = when {
         vm.huntState == HuntState.CALIBRATING -> if (vm.stepsAvailable) "Walk around a bit" else "Allow motion access for direction"
         vm.huntState == HuntState.LOST -> "Lost it, keep moving"
-        anim.feet < 2 -> "Should be within your reach"
+        anim.feet < 2.5 -> "Should be within your reach"   // same point Michelle says it
         vm.trend == Trend.WARMER -> "Warmer"
         vm.trend == Trend.COLDER -> "Colder"
         else -> "Steady"

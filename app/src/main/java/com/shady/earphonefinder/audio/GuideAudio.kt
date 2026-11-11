@@ -38,6 +38,7 @@ class GuideAudio(private val context: Context) {
         WITHIN_15(R.raw.voice_within15, 4152),
         WITHIN_10(R.raw.voice_within10, 2928),
         WITHIN_5(R.raw.voice_within5, 4368),
+        WITHIN_REACH(R.raw.voice_within_reach, 3768),
     }
 
     /** 0.15 of full scale is about -16 dB: background, never louder than the voice. */
