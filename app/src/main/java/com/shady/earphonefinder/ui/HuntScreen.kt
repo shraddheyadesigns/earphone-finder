@@ -66,7 +66,7 @@ fun HuntScreen(vm: FinderViewModel) {
             withFrameNanos { now ->
                 val dt = if (last == 0L) 0.016 else ((now - last) / 1e9).coerceIn(0.0, 0.05)
                 last = now
-                anim.step(dt, vm.huntState, vm.feet, vm.relativeDirDeg)
+                anim.step(dt, vm.huntState, vm.feet, vm.relativeDirDeg, vm.arcExtraDeg, vm.patch)
                 pmPhase.floatValue += (dt * 6).toFloat()
                 frame.value = GlowFrame(
                     timeSec = ((now - start) / 1e9).toFloat(),
@@ -75,6 +75,7 @@ fun HuntScreen(vm: FinderViewModel) {
                     warm = anim.warm.toFloat(),
                     found = anim.found.toFloat(),
                     even = anim.even.toFloat(),
+                    patch = anim.patch.toFloat(),
                     spreadHalfRad = anim.spreadHalfRad,
                 )
             }

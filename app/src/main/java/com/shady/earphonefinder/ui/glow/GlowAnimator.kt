@@ -39,6 +39,8 @@ class GlowAnimator(private val k: GlowTuning = GlowTuning()) {
     private var unwrapped = 0.0
     var warm = 0.0; private set          // 0 = slate, 1 = temperature colours (follows distance, any state but lost)
     var found = 0.0; private set         // 0 = no direction, 1 = arc on the bud's side
+    var patch = 0.0; private set         // soft yellow patch toward the likely spot, up close
+    private var extraSpread = 90.0
     var even = 0.0; private set          // 1 = even glow all round (calibrating), 0 = spinning loader (lost)
     var closeness = 0.0; private set     // 0 = legit far, 1 = ~1 ft
     var feet = 24.0; private set
@@ -49,11 +51,16 @@ class GlowAnimator(private val k: GlowTuning = GlowTuning()) {
         get() {
             val c = closeness
             val near = c * c * (3 - 2 * c)
-            val deg = k.spreadFarDeg + (k.spreadNearDeg - k.spreadFarDeg) * near
+            val deg = k.spreadFarDeg + (k.spreadNearDeg - k.spreadFarDeg) * near + extraSpread   // wider when unsure
             return (min(deg, 359.0) / 2 * PI / 180).toFloat()
         }
 
-    fun step(dt: Double, target: HuntState, targetFeet: Double?, targetDirDeg: Double?) {
+    fun step(
+        dt: Double, target: HuntState, targetFeet: Double?, targetDirDeg: Double?,
+        extraSpreadDeg: Double = 0.0, patchTarget: Double = 0.0,
+    ) {
+        extraSpread = ease(extraSpread, extraSpreadDeg, dt, 0.8)
+        patch = ease(patch, if (target == HuntState.FOUND) patchTarget else 0.0, dt, 0.6)
         val tDir = (targetDirDeg ?: Math.toDegrees(dir)) * PI / 180
 
         if (target != state) {

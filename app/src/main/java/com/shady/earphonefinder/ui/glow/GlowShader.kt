@@ -15,6 +15,7 @@ uniform float uHot;
 uniform float uWarm;
 uniform float uFound;
 uniform float uEven;
+uniform float uPatch;
 uniform float uWidth;
 uniform float uBright;
 uniform float uShimmer;
@@ -113,6 +114,8 @@ float3 glowAt(float2 px){
   float lum = mix(0.8, lumAt(uHot), uWarm);
 
   float3 c = col * g * uBright * lum;
+  // up close: a soft yellow patch toward the likely spot, on top of the even rust ring
+  c += float3(1.0, 0.8, 0.32) * uPatch * near * exp(-e / (w * 1.1)) * exp(7.0 * (cos(a - uDir) - 1.0)) * 1.4;
   return 1.0 - exp(-c * 1.25);                // soft tone map
 }
 

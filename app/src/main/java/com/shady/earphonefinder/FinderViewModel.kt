@@ -14,6 +14,7 @@ import com.shady.earphonefinder.audio.Sounds
 import com.shady.earphonefinder.bt.BtScanner
 import com.shady.earphonefinder.bt.Sighting
 import com.shady.earphonefinder.engine.BearingEstimator
+import com.shady.earphonefinder.engine.DirectionMap
 import com.shady.earphonefinder.engine.DirectionSweep
 import com.shady.earphonefinder.engine.Proximity
 import com.shady.earphonefinder.engine.RssiSmoother
@@ -95,12 +96,16 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
     var showDetails by mutableStateOf(false)
 
     // ---------- spin test as a direction source ----------
-    private var spinBearingDeg: Double? = null
-    private var spinAt = 0L
-    private var spinSteps = 0
-    private var walkLocked = false
-    private var walkLockedAt = 0L
+    // ---------- shared direction map: walking, turning and spins all feed one estimate ----------
+    private val map = DirectionMap()
+    private data class SpinSample(val t: Long, val rssi: Int, val heading: Double)
+    private val spinBuffer = ArrayList<SpinSample>()
+    private var mapFound = false
     var spinNote by mutableStateOf<String?>(null)
+    /** Extra arc width when the map is unsure, degrees. */
+    var arcExtraDeg by mutableStateOf(90.0); private set
+    /** 0..1: the soft yellow patch toward the likely spot, up close. */
+    var patch by mutableStateOf(0.0); private set
 
     /** Where the bud is relative to the top of the phone, degrees clockwise. */
     val relativeDirDeg: Double?
@@ -114,7 +119,8 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         val h = heading ?: return
         if (target == null) return
         bearing.onStep(h)
-        stepCount = bearing.steps
+        map.onStep(h)
+        stepCount = map.steps
     }
 
     // ---------- audio guide: chirps + Michelle's voice ----------
@@ -255,6 +261,10 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         val v = smoother.add(s.tMs, s.rssi)
         smoothed = v
         bearing.onRssi(s.tMs, s.rssi)
+        heading?.let { h ->
+            if (sweeping) spinBuffer.add(SpinSample(s.tMs, s.rssi, h))
+            else map.add(s.tMs, s.rssi, h)
+        }
         lastRaw = s.rssi
         recent.addLast(s.tMs)
         while (recent.isNotEmpty() && s.tMs - recent.first() > 5_000) recent.removeFirst()
@@ -296,21 +306,16 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
 
         // hunt: distance in feet, direction from walking, and which state we're in
         if (v != null) feet = Proximity.metres(v) * 3.281
-        val est = bearing.update(t)
-        bearingConfidence = est?.confidence ?: 0.0
-        if (bearing.locked && !walkLocked) walkLockedAt = t
-        walkLocked = bearing.locked
-
-        // A spin result is a fresh, strong reading, but it goes stale as you walk away from that spot.
-        val spin = spinBearingDeg
-        val spinValid = spin != null && t - spinAt < 90_000 && bearing.steps - spinSteps < 12
-        if (spin != null && !spinValid) spinBearingDeg = null
-        // use whichever direction source is newest
-        bearingDeg = when {
-            spinValid && (!bearing.locked || spinAt >= walkLockedAt) -> spin
-            bearing.locked && est != null -> est.bearingDeg
-            else -> null
-        }
+        bearing.update(t)   // kept for logging; the map is the direction source now
+        val est = map.estimate()
+        val conf = est?.confidence ?: 0.0
+        bearingConfidence = conf
+        // lock with hysteresis, and only with enough evidence behind it
+        if (!mapFound && est != null && conf > 0.6 && est.evidence > 6) mapFound = true
+        if (mapFound && (est == null || conf < 0.45)) mapFound = false
+        bearingDeg = if (mapFound) est?.bearingDeg else null
+        arcExtraDeg = (1.0 - conf).coerceIn(0.0, 1.0) * 90.0
+        patch = if (mapFound) ((conf - 0.7) / 0.3).coerceIn(0.0, 1.0) else 0.0
         huntState = when {
             since != null && since > 8_000 -> HuntState.LOST   // some buds advertise only ~1-2x a second
             bearingDeg != null -> HuntState.FOUND
@@ -328,7 +333,7 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         smoothed = null; lastRaw = null; trend = Trend.UNKNOWN; hotness = 0f
         sweepResult = null; sweeping = false
         bearing.reset(); bearingDeg = null; bearingConfidence = 0.0; stepCount = 0
-        spinBearingDeg = null; spinNote = null; walkLocked = false; walkLockedAt = 0L
+        map.reset(); spinBuffer.clear(); mapFound = false; spinNote = null; patch = 0.0; arcExtraDeg = 90.0
         feet = null; huntState = HuntState.CALIBRATING; showDetails = false
         zone = null; zoneCandidate = null; lastLineAt = 0; lastCalibrateAt = 0; lastLostAt = 0
         prevHunt = HuntState.CALIBRATING
@@ -358,6 +363,7 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
 
     fun startSweep() {
         spinNote = null
+        spinBuffer.clear()
         sweep.reset()
         sweepCoverage = 0f
         sweepResult = null
@@ -368,21 +374,24 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         sweeping = false
         val r = sweep.result()
         sweepResult = r
-        when {
-            r == null -> spinNote = "Not enough of the circle. Try again, slower"
-            r.spreadDb < 4 -> spinNote = "Didn't catch it. Try again, slower"
-            else -> {
-                // strong enough: this becomes the hunt's direction
-                spinBearingDeg = r.headingDeg
-                spinAt = now()
-                spinSteps = bearing.steps
-                spinNote = null
-            }
+        // a good spin is a high-quality burst; a weak or flipped one still counts, just quietly
+        val weight = when {
+            r == null -> { spinNote = "Not enough of the circle. Try again, slower"; 0.6 }
+            r.spreadDb < 4 -> { spinNote = "Didn't catch it. Try again, slower"; 0.6 }
+            !r.consistent -> { spinNote = "Reflections confused it. Try again from another spot"; 0.4 }
+            else -> { spinNote = null; 1.5 }
         }
+        flushSpin(weight)
     }
 
     fun cancelSweep() {
         sweeping = false
+        flushSpin(1.0)
+    }
+
+    private fun flushSpin(weight: Double) {
+        for (p in spinBuffer) map.add(p.t, p.rssi, p.heading, map.x, map.y, weight)
+        spinBuffer.clear()
     }
 
     // ---------- recording ----------

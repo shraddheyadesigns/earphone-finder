@@ -1,5 +1,6 @@
 package com.shady.earphonefinder.engine
 
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -20,7 +21,11 @@ class DirectionSweep(private val sectors: Int = 12) {
     data class Result(
         val headingDeg: Double,   // compass heading to face
         val spreadDb: Double,     // strongest slice minus weakest slice
+        val weakestDeg: Double = 0.0,
     ) {
+        /** Flip guard: the weakest side should sit roughly behind the strongest. If not, reflections fooled it. */
+        val consistent: Boolean
+            get() = abs(turn(headingDeg, weakestDeg)) >= 110
         val confidence: String
             get() = when {
                 spreadDb >= 8 -> "Strong"
@@ -53,6 +58,7 @@ class DirectionSweep(private val sectors: Int = 12) {
             .associate { it.index to RssiSmoother.median(it.value) }
         val lo = med.values.min()
         val hi = med.values.max()
+        val weakest = med.entries.minByOrNull { it.value }!!.key * size
         var x = 0.0
         var y = 0.0
         for ((i, m) in med) {
@@ -61,9 +67,9 @@ class DirectionSweep(private val sectors: Int = 12) {
             x += w * sin(a)
             y += w * cos(a)
         }
-        if (x == 0.0 && y == 0.0) return Result(0.0, 0.0)
+        if (x == 0.0 && y == 0.0) return Result(0.0, 0.0, weakest)
         val heading = (Math.toDegrees(atan2(x, y)) + 360.0) % 360.0
-        return Result(heading, hi - lo)
+        return Result(heading, hi - lo, weakest)
     }
 
     fun reset() = bins.forEach { it.clear() }
