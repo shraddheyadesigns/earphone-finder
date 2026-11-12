@@ -41,6 +41,7 @@ class GlowAnimator(private val k: GlowTuning = GlowTuning()) {
     var found = 0.0; private set         // 0 = no direction, 1 = arc on the bud's side
     var patch = 0.0; private set         // soft yellow patch toward the likely spot, up close
     private var extraSpread = 90.0
+    var patchDir = 0.0; private set     // radians, eased the short way round
     var even = 0.0; private set          // 1 = even glow all round (calibrating), 0 = spinning loader (lost)
     var closeness = 0.0; private set     // 0 = legit far, 1 = ~1 ft
     var feet = 24.0; private set
@@ -57,10 +58,11 @@ class GlowAnimator(private val k: GlowTuning = GlowTuning()) {
 
     fun step(
         dt: Double, target: HuntState, targetFeet: Double?, targetDirDeg: Double?,
-        extraSpreadDeg: Double = 0.0, patchTarget: Double = 0.0,
+        extraSpreadDeg: Double = 0.0, patchTarget: Double = 0.0, patchDirDeg: Double? = null,
     ) {
         extraSpread = ease(extraSpread, extraSpreadDeg, dt, 0.8)
-        patch = ease(patch, if (target == HuntState.FOUND) patchTarget else 0.0, dt, 0.6)
+        if (patchDirDeg != null) patchDir += shortest(Math.toRadians(patchDirDeg) - patchDir) * (1 - exp(-dt / 0.35))
+        patch = ease(patch, if (target != HuntState.LOST) patchTarget else 0.0, dt, 0.6)
         val tDir = (targetDirDeg ?: Math.toDegrees(dir)) * PI / 180
 
         if (target != state) {

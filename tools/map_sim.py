@@ -15,7 +15,7 @@ STEP_M = 0.7
 
 
 class DirectionMap:
-    def __init__(s, half_m=10.0, cell_m=0.5, tau_s=30.0):
+    def __init__(s, half_m=10.0, cell_m=0.5, tau_s=75.0):
         s.n = int(2 * half_m / cell_m) + 1
         s.cell, s.half, s.tau = cell_m, half_m, tau_s
         s.cx = [-half_m + i * cell_m for i in range(s.n)]

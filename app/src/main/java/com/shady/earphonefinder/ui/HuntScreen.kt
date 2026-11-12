@@ -66,7 +66,7 @@ fun HuntScreen(vm: FinderViewModel) {
             withFrameNanos { now ->
                 val dt = if (last == 0L) 0.016 else ((now - last) / 1e9).coerceIn(0.0, 0.05)
                 last = now
-                anim.step(dt, vm.huntState, vm.feet, vm.relativeDirDeg, vm.arcExtraDeg, vm.patch)
+                anim.step(dt, vm.huntState, vm.feet, vm.relativeDirDeg, vm.arcExtraDeg, vm.patch, vm.patchDirDeg)
                 pmPhase.floatValue += (dt * 6).toFloat()
                 frame.value = GlowFrame(
                     timeSec = ((now - start) / 1e9).toFloat(),
@@ -76,6 +76,7 @@ fun HuntScreen(vm: FinderViewModel) {
                     found = anim.found.toFloat(),
                     even = anim.even.toFloat(),
                     patch = anim.patch.toFloat(),
+                    patchDirRad = anim.patchDir.toFloat(),
                     spreadHalfRad = anim.spreadHalfRad,
                 )
             }
@@ -85,7 +86,7 @@ fun HuntScreen(vm: FinderViewModel) {
     val f = frame.value
     // only ask you to move when it helps: cold and no direction yet, or lost. When you're warm, just guide.
     val farOrUnknown = vm.feet?.let { it > 10 } ?: true
-    val asking = vm.sweeping || vm.huntState == HuntState.LOST || (vm.huntState == HuntState.CALIBRATING && farOrUnknown)
+    val asking = vm.sweeping || vm.lookAround || vm.huntState == HuntState.LOST || (vm.huntState == HuntState.CALIBRATING && farOrUnknown)
     // up close the background gets bright: add a soft shadow and lift the subtext a little
     val nearK = ((f.closeness * f.warm - 0.6f) / 0.35f).coerceIn(0f, 1f)
     val scrim = nearK * nearK * (3 - 2 * nearK)
@@ -96,6 +97,7 @@ fun HuntScreen(vm: FinderViewModel) {
     val (num, unit) = if (lost) "lost" to "" else GlowAnimator.formatFeet(anim.feet)
     val hint = when {
         vm.sweeping -> "Turn slowly in a full circle"
+        vm.lookAround -> "Look left and right"
         vm.spinNote != null && vm.huntState == HuntState.CALIBRATING -> vm.spinNote!!
         vm.huntState == HuntState.CALIBRATING && farOrUnknown ->
             if (vm.stepsAvailable) "Move around to find the direction" else "Allow motion access for direction"

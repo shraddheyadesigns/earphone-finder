@@ -22,6 +22,7 @@ import com.shady.earphonefinder.engine.Trend
 import com.shady.earphonefinder.sensors.Compass
 import com.shady.earphonefinder.sensors.StepSensor
 import com.shady.earphonefinder.ui.glow.HuntState
+import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -106,6 +107,21 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
     var arcExtraDeg by mutableStateOf(90.0); private set
     /** 0..1: the soft yellow patch toward the likely spot, up close. */
     var patch by mutableStateOf(0.0); private set
+    private var headingAtLastReading: Double? = null
+    private var wasFound = false
+    private var lookAroundUntil = 0L
+    private var lastBearing: Double? = null
+    private var lastBearingAt = 0L
+    /** True for a few seconds after the direction lock slips: "Look left and right". */
+    var lookAround by mutableStateOf(false); private set
+
+    /** Where the yellow patch points, relative to the top of the phone (last known direction). */
+    val patchDirDeg: Double?
+        get() {
+            val b = lastBearing ?: return null
+            val h = heading ?: return null
+            return ((b - h) % 360 + 540) % 360 - 180
+        }
 
     /** Where the bud is relative to the top of the phone, degrees clockwise. */
     val relativeDirDeg: Double?
@@ -263,7 +279,12 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         bearing.onRssi(s.tMs, s.rssi)
         heading?.let { h ->
             if (sweeping) spinBuffer.add(SpinSample(s.tMs, s.rssi, h))
-            else map.add(s.tMs, s.rssi, h)
+            else {
+                // turning your body is a mini-spin: readings taken mid-turn carry more weight
+                val turning = abs(DirectionSweep.turn(headingAtLastReading ?: h, h)) > 25
+                map.add(s.tMs, s.rssi, h, if (turning) 1.3 else 1.0)
+            }
+            headingAtLastReading = h
         }
         lastRaw = s.rssi
         recent.addLast(s.tMs)
@@ -313,9 +334,19 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         // lock with hysteresis, and only with enough evidence behind it
         if (!mapFound && est != null && conf > 0.6 && est.evidence > 6) mapFound = true
         if (mapFound && (est == null || conf < 0.45)) mapFound = false
+        if (wasFound && !mapFound) lookAroundUntil = t + 6_000      // lock just slipped: ask for a quick look around
+        wasFound = mapFound
         bearingDeg = if (mapFound) est?.bearingDeg else null
+        if (est != null && conf > 0.35) { lastBearing = est.bearingDeg; lastBearingAt = t }
         arcExtraDeg = (1.0 - conf).coerceIn(0.0, 1.0) * 90.0
-        patch = if (mapFound) ((conf - 0.7) / 0.3).coerceIn(0.0, 1.0) else 0.0
+        // yellow patch up close: shows with any recent sense of direction, stronger when sure
+        val recent = lastBearing != null && t - lastBearingAt < 60_000
+        patch = when {
+            mapFound -> (0.6 + 0.4 * ((conf - 0.6) / 0.4)).coerceIn(0.6, 1.0)
+            recent -> 0.45 * (1.0 - (t - lastBearingAt) / 60_000.0)
+            else -> 0.0
+        }
+        lookAround = t < lookAroundUntil && huntState != HuntState.LOST
         huntState = when {
             since != null && since > 8_000 -> HuntState.LOST   // some buds advertise only ~1-2x a second
             bearingDeg != null -> HuntState.FOUND
@@ -334,6 +365,7 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         sweepResult = null; sweeping = false
         bearing.reset(); bearingDeg = null; bearingConfidence = 0.0; stepCount = 0
         map.reset(); spinBuffer.clear(); mapFound = false; spinNote = null; patch = 0.0; arcExtraDeg = 90.0
+        headingAtLastReading = null; wasFound = false; lookAroundUntil = 0L; lastBearing = null; lookAround = false
         feet = null; huntState = HuntState.CALIBRATING; showDetails = false
         zone = null; zoneCandidate = null; lastLineAt = 0; lastCalibrateAt = 0; lastLostAt = 0
         prevHunt = HuntState.CALIBRATING

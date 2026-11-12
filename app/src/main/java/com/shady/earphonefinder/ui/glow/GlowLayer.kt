@@ -27,6 +27,7 @@ data class GlowFrame(
     val spreadHalfRad: Float,
     val even: Float = 0f,          // last, so positional callers keep working
     val patch: Float = 0f,
+    val patchDirRad: Float = 0f,
 )
 
 @Composable
@@ -50,6 +51,7 @@ private fun ShaderGlow(frame: State<GlowFrame>, k: GlowTuning, modifier: Modifie
         shader.setFloatUniform("uFound", f.found)
         shader.setFloatUniform("uEven", f.even)
         shader.setFloatUniform("uPatch", f.patch)
+        shader.setFloatUniform("uPatchDir", f.patchDirRad)
         shader.setFloatUniform("uWidth", k.glowWidth)
         shader.setFloatUniform("uBright", k.brightness)
         shader.setFloatUniform("uShimmer", k.shimmer)

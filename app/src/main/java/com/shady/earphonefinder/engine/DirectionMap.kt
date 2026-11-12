@@ -17,7 +17,7 @@ import kotlin.math.sin
  * you were (steps + compass) and which way you faced. For each spot the expected signal shape is
  *     -10·n·log10(distance) - BODY·blocked(facing vs direction to the spot)
  * The bud's own loudness is unknown, so each spot fits its own offset: we keep running sums of the
- * residual and score spots by how consistent it is. Old evidence fades over [tauMs].
+ * residual and score spots by how consistent it is. Old evidence fades over [tauMs] (75 s).
  *
  * tools/map_sim.py, with reflections and a body loss the model doesn't know:
  * one spin ~16° median, walking ~15°, spin then walk ~6°, confidently wrong 0-5%.
@@ -25,7 +25,7 @@ import kotlin.math.sin
 class DirectionMap(
     private val halfM: Double = 10.0,
     private val cellM: Double = 0.5,
-    private val tauMs: Double = 30_000.0,
+    private val tauMs: Double = 75_000.0,     // long memory: a spin keeps helping while you walk
     private val stepM: Double = 0.7,
 ) {
     data class Estimate(
