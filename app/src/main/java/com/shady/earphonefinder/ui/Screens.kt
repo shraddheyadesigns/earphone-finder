@@ -1,6 +1,27 @@
 package com.shady.earphonefinder.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.res.painterResource
+import com.shady.earphonefinder.BudHint
+import com.shady.earphonefinder.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -81,8 +102,13 @@ fun DeviceListScreen(vm: FinderViewModel) {
         Column(Modifier.fillMaxSize()) {
             Spacer(Modifier.height(32.dp))
             Text("Which one is yours?", style = Look.title)
-            Spacer(Modifier.height(8.dp))
-            Text("Paired on top. Not there? Take the other bud out or open the case.", style = Look.body)
+            Spacer(Modifier.height(20.dp))
+            CaseTip()
+            if (vm.budsGone) {
+                Spacer(Modifier.height(10.dp))
+                Text("Your buds just went quiet. The lost one may be off, out of range, or in a closed case.",
+                    style = Look.body.copy(color = Color(0xFFFF8A5B)))
+            }
             vm.error?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(it, style = Look.body.copy(color = Color(0xFFFF8A5B)))
@@ -104,6 +130,7 @@ fun DeviceListScreen(vm: FinderViewModel) {
 @Composable
 private fun DeviceItem(d: DeviceRow, now: Long, onClick: () -> Unit) {
     val quiet = !d.paired && d.name.isNullOrBlank()
+    val isBud = d.hint != BudHint.NONE
     Row(
         Modifier
             .fillMaxWidth()
@@ -111,11 +138,25 @@ private fun DeviceItem(d: DeviceRow, now: Long, onClick: () -> Unit) {
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (isBud) {
+            Image(
+                painterResource(R.drawable.ic_bud), contentDescription = null,
+                colorFilter = ColorFilter.tint(Color.White.copy(alpha = if (d.hint == BudHint.LOST) 0.9f else 0.4f)),
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(14.dp))
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 d.name?.takeIf { it.isNotBlank() } ?: "No name",
                 style = Look.name.copy(color = Color.White.copy(alpha = if (quiet) 0.45f else 0.92f)),
             )
+            when (d.hint) {
+                BudHint.LOST -> HintLine("probably the lost one", Color(0xFFFF9A3C))
+                BudHint.WITH_YOU -> HintLine("probably with you", Color.White.copy(alpha = 0.45f))
+                BudHint.UNSURE -> HintLine("both close, can’t tell yet", Color.White.copy(alpha = 0.45f))
+                BudHint.NONE -> {}
+            }
             Spacer(Modifier.height(3.dp))
             val age = ((now - d.lastSeenMs) / 1000).coerceAtLeast(0)
             Text(
@@ -124,6 +165,64 @@ private fun DeviceItem(d: DeviceRow, now: Long, onClick: () -> Unit) {
             )
         }
         Text("${d.rssi}", style = Look.name.copy(fontSize = 22.sp, color = Color.White.copy(alpha = 0.7f)))
+    }
+}
+
+@Composable
+private fun HintLine(text: String, color: Color) {
+    Spacer(Modifier.height(3.dp))
+    Text(text, style = Look.body.copy(fontSize = 13.sp, color = color))
+}
+
+/** Line drawing: a bud drops into its case, the lid shuts, a small light goes out. Loops gently. */
+@Composable
+private fun CaseTip() {
+    val t by rememberInfiniteTransition(label = "case").animateFloat(
+        0f, 1f, infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "caseT",
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Canvas(Modifier.size(width = 64.dp, height = 52.dp)) {
+            val ink = Color.White.copy(alpha = 0.55f)
+            val sw = Stroke(width = 1.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            val w = size.width; val h = size.height
+            fun ss(a: Float, b: Float, x: Float): Float { val k = ((x - a) / (b - a)).coerceIn(0f, 1f); return k * k * (3 - 2 * k) }
+            val fadeAll = 1f - ss(0.9f, 1f, t)
+            val left = w * 0.14f; val right = w * 0.86f; val hinge = h * 0.56f; val bottom = h * 0.94f
+            // the bud, dropping in
+            val drop = ss(0.08f, 0.34f, t)
+            val budY = h * 0.06f + (h * 0.52f - h * 0.06f) * drop
+            val budA = ss(0.02f, 0.12f, t) * fadeAll * (1f - 0.6f * ss(0.45f, 0.62f, t))
+            if (budA > 0f) {
+                val c = Color.White.copy(alpha = 0.6f * budA)
+                drawCircle(c, radius = w * 0.075f, center = Offset(w * 0.5f, budY), style = sw)
+                drawLine(c, Offset(w * 0.53f, budY + w * 0.07f), Offset(w * 0.56f, budY + w * 0.2f), strokeWidth = 1.4.dp.toPx(), cap = StrokeCap.Round)
+            }
+            // case body
+            drawRoundRect(ink.copy(alpha = 0.55f * fadeAll), topLeft = Offset(left, hinge), size = Size(right - left, bottom - hinge),
+                cornerRadius = CornerRadius(h * 0.16f), style = sw)
+            // lid: open at the start, swings shut around the back hinge
+            val close = ss(0.42f, 0.62f, t)
+            val ang = -72f * (1f - close)
+            rotate(ang, pivot = Offset(left, hinge)) {
+                val lid = Path().apply {
+                    moveTo(left, hinge); lineTo(left, h * 0.42f)
+                    quadraticBezierTo(left, h * 0.3f, left + h * 0.14f, h * 0.3f)
+                    lineTo(right - h * 0.14f, h * 0.3f)
+                    quadraticBezierTo(right, h * 0.3f, right, h * 0.42f)
+                    lineTo(right, hinge)
+                }
+                drawPath(lid, ink.copy(alpha = 0.55f * fadeAll), style = sw)
+            }
+            // the little status light: on while open, goes out once shut
+            val light = (1f - ss(0.66f, 0.8f, t)) * ss(0.0f, 0.06f, t) * fadeAll
+            drawCircle(Color(0xFFFF9A3C).copy(alpha = 0.9f * light), radius = 1.6.dp.toPx(), center = Offset(w * 0.5f, h * 0.78f))
+        }
+        Spacer(Modifier.width(14.dp))
+        Column {
+            Text("Got one bud with you?", style = Look.name.copy(fontSize = 15.sp))
+            Spacer(Modifier.height(2.dp))
+            Text("Put it in the case and close it. The one left in the list is the lost one.", style = Look.body.copy(fontSize = 13.sp))
+        }
     }
 }
 

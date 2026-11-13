@@ -39,7 +39,11 @@ data class DeviceRow(
     val lastSeenMs: Long,
     val source: Sighting.Source,
     val paired: Boolean,
+    val hint: BudHint = BudHint.NONE,
 )
+
+/** For a pair of buds with the same name: which one is probably in your ear, which one is lost. */
+enum class BudHint { NONE, WITH_YOU, LOST, UNSURE }
 
 /** All state lives here and is only touched on the main thread. */
 class FinderViewModel(app: Application) : AndroidViewModel(app) {
@@ -141,7 +145,7 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- audio guide: chirps + Michelle's voice ----------
     private val guide = GuideAudio(app)
-    var soundOn by mutableStateOf(true)
+    var soundOn by mutableStateOf(false)   // off until asked: a lost bud is too quiet to guide you anyway
     var guideOutputOk by mutableStateOf(false); private set
     private var zone: GuideAudio.Line? = null          // last zone announced
     private var zoneCandidate: GuideAudio.Line? = null
@@ -305,12 +309,44 @@ class FinderViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Last time each name showed up as a pair (two rows), so a lone survivor can be called the lost one. */
+    private val pairSeenAt = HashMap<String, Long>()
+    /** True when your paired buds were around a moment ago and now none are: the lost one may be off. */
+    var budsGone by mutableStateOf(false); private set
+
     private fun refreshList() {
         val t = now()
-        seen.values.removeAll { t - it.lastSeenMs > 30_000 }
-        devices = seen.values
-            .filter { !hideUnnamed || !it.name.isNullOrBlank() }
-            .sortedWith(compareByDescending<DeviceRow> { it.paired }.thenByDescending { it.rssi })
+        // BLE buds advertise about once a second, so drop them quickly once they stop (a closed case);
+        // classic results come in slow batches, so they get longer.
+        seen.values.removeAll { t - it.lastSeenMs > if (it.source == Sighting.Source.BLE) 10_000 else 30_000 }
+        val rows = seen.values.filter { !hideUnnamed || !it.name.isNullOrBlank() }
+
+        val hinted = rows.groupBy { it.name?.takeIf { n -> n.isNotBlank() } }.flatMap { (name, group) ->
+            when {
+                name == null -> group
+                group.size >= 2 -> {
+                    pairSeenAt[name] = t
+                    val sorted = group.sortedByDescending { it.rssi }
+                    val gap = sorted[0].rssi - sorted[1].rssi
+                    if (gap >= 8) {
+                        listOf(sorted[0].copy(hint = BudHint.WITH_YOU)) +
+                            sorted.drop(1).map { it.copy(hint = BudHint.LOST) }
+                    } else sorted.map { it.copy(hint = BudHint.UNSURE) }
+                }
+                // its twin was here in the last two minutes and has gone quiet (back in the case)
+                (pairSeenAt[name] ?: 0L) > t - 120_000 -> group.map { it.copy(hint = BudHint.LOST) }
+                else -> group
+            }
+        }
+        val bondedNames = bonded.values.filter { it.isNotBlank() }.toSet()
+        budsGone = pairSeenAt.any { (n, at) -> n in bondedNames && at > t - 120_000 } &&
+            hinted.none { it.paired && it.name != null && it.name in bondedNames }
+
+        devices = hinted.sortedWith(
+            compareByDescending<DeviceRow> { it.hint == BudHint.LOST }
+                .thenByDescending { it.paired }
+                .thenByDescending { it.rssi },
+        )
     }
 
     private fun refreshTracking() {

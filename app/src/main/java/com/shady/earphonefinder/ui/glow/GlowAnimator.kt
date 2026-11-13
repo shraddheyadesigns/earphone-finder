@@ -92,7 +92,7 @@ class GlowAnimator(private val k: GlowTuning = GlowTuning()) {
         // keep dir in a sane range without visible jumps
         if (dir > 1000) { dir -= TAU * 100; unwrapped -= TAU * 100 }
 
-        if (targetFeet != null) feet = ease(feet, targetFeet, dt, 0.6)
+        if (targetFeet != null) feet = ease(feet, targetFeet, dt, 0.4)
         closeness = ease(closeness, closenessFromFeet(feet), dt, 0.4)
     }
 

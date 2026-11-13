@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -116,7 +117,16 @@ fun IconButtonLike(label: String, glyph: Glyph?, onClick: () -> Unit) {
             .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (glyph != null) {
+        if (glyph == Glyph.EARBUD_LEFT || glyph == Glyph.EARBUD_RIGHT) {
+            // the supplied earbud icon, mirrored for the right side
+            androidx.compose.foundation.Image(
+                androidx.compose.ui.res.painterResource(com.shady.earphonefinder.R.drawable.ic_bud),
+                contentDescription = null,
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White.copy(alpha = 0.85f)),
+                modifier = Modifier.size(17.dp).graphicsLayer { scaleX = if (glyph == Glyph.EARBUD_RIGHT) -1f else 1f },
+            )
+            Spacer(Modifier.width(8.dp))
+        } else if (glyph != null) {
             Canvas(Modifier.size(16.dp)) { drawGlyph(glyph) }
             Spacer(Modifier.width(8.dp))
         }
